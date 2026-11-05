@@ -1,6 +1,8 @@
 package appui
 
 import (
+	"sync"
+
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/widget"
 
@@ -8,10 +10,37 @@ import (
 	"chordly/router"
 )
 
+var (
+	appRouterMu sync.RWMutex
+	appRouter   *router.Router
+)
+
+// SetAppRouter sets the active global router for component navigation.
+func SetAppRouter(r *router.Router) {
+	appRouterMu.Lock()
+	appRouter = r
+	appRouterMu.Unlock()
+}
+
+// AppRouter returns the active application router if one has been registered.
+func AppRouter() *router.Router {
+	appRouterMu.RLock()
+	defer appRouterMu.RUnlock()
+	return appRouter
+}
+
+// Navigate routes to the specified path if an active router is set.
+func Navigate(path string) {
+	if r := AppRouter(); r != nil {
+		r.Navigate(path)
+	}
+}
+
 // NewShell builds the complete Metrolist YouTube Music application layout.
 // The shell rebuilds when the active theme palette changes; the toast layer
 // wraps it so notifications survive those rebuilds.
 func NewShell(r *router.Router) widget.Widget {
+	SetAppRouter(r)
 	return NewToastHost(newReactiveView(
 		func() widget.Widget { return buildShell(r) },
 		WatchSignal(theme.SigActivePalette.AsReadonly()),

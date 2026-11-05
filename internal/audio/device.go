@@ -1,7 +1,8 @@
 // Audio output driver for Chordly: low-latency PCM device management.
 //
 // TSK-101 — the playback pipeline is:
-//   decoder → RingReader → VolumeReader → Device (io.Writer consumer)
+//
+//	decoder → RingReader → VolumeReader → Device (io.Writer consumer)
 //
 // The driver is interface-first: Device wraps an io.Writer sink (e.g. an
 // oto/v3 player or a malgo device) so the engine can operate headless in
@@ -258,6 +259,18 @@ func (d *Device) Stop() error {
 	d.position = 0
 	d.framesPlayed.Store(0)
 	return nil
+}
+
+// Wait blocks until the current pump goroutine exits. Call Stop and unblock the
+// source/sink first; otherwise a pump blocked on Read or Write will keep
+// Wait blocked. It is intended for teardown between tracks.
+func (d *Device) Wait() {
+	d.mu.Lock()
+	done := d.pumpDone
+	d.mu.Unlock()
+	if done != nil {
+		<-done
+	}
 }
 
 // Load replaces the current PCM source. If the device is Playing, playback

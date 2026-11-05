@@ -66,9 +66,30 @@ func newReleaseTrackRow(track model.Track) widget.Widget {
 	// Duration
 	durationText := primitives.Text(track.DurationStr).FontSize(12).Color(theme.ColorTextMuted)
 
+	// Play button
+	playBtn := NewVectorIconButton(IconPlay, 32, 14, func() {
+		state.CurrentTrack.Set(track)
+		state.PlaybackStatus.Set(model.StatePlaying)
+		state.Playhead.Set(0)
+		albumID := track.Album
+		if albumID == "" {
+			albumID = track.ID
+		}
+		Navigate("/album/" + albumID)
+	}, func(s *IconButtonStyle) {
+		s.Background = widget.ColorTransparent
+		s.BorderWidth = 0
+		s.Foreground = theme.ColorAccent
+	})
+
 	// Action buttons (Vector Heart & More)
 	heartBtn := NewVectorIconButton(IconHeart, 32, 14, func() {
-		// Toggle like
+		track.IsLiked = !track.IsLiked
+		if track.IsLiked {
+			ShowSuccess("Added to Liked Songs")
+		} else {
+			ShowInfo("Removed from Liked Songs")
+		}
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.BorderWidth = 0
@@ -76,7 +97,13 @@ func newReleaseTrackRow(track model.Track) widget.Widget {
 	})
 
 	moreBtn := NewVectorIconButton(IconMore, 32, 14, func() {
-		// Options
+		if track.Artist != "" {
+			artistID := track.ArtistID
+			if artistID == "" {
+				artistID = track.Artist
+			}
+			Navigate("/artist/" + artistID)
+		}
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.BorderWidth = 0
@@ -90,6 +117,8 @@ func newReleaseTrackRow(track model.Track) widget.Widget {
 		primitives.Expanded(primitives.Box()),
 		durationText,
 		primitives.Box().Width(8),
+		playBtn,
+		primitives.Box().Width(4),
 		heartBtn,
 		moreBtn,
 	).

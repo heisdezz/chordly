@@ -1,6 +1,8 @@
 package appui
 
 import (
+	"time"
+
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/primitives"
@@ -108,21 +110,109 @@ func buildPlayerPage(c router.RouteContext) widget.Widget {
 		Gap(4).
 		CrossAlign(primitives.CrossAxisStretch)
 
-	return primitives.VBox(
-		topBar,
-		primitives.Box().Height(18),
-		primitives.Expanded(
-			primitives.HBox(
-				primitives.Expanded(NewPlayerArtwork()),
-				primitives.Box().Width(36),
-				primitives.Expanded(details),
-			).CrossAlign(primitives.CrossAxisCenter),
-		),
-	).
-		Padding(28).
-		CrossAlign(primitives.CrossAxisStretch).
-		Background(theme.ColorCanvas)
+	scrim := primitives.Box().Background(theme.ColorCanvas.WithAlpha(0.55))
+
+	return newPlayerScreen(
+		primitives.VBox(
+			topBar,
+			primitives.Box().Height(18),
+			primitives.Expanded(
+				primitives.HBox(
+					primitives.Expanded(NewPlayerArtwork()),
+					primitives.Box().Width(36),
+					primitives.Expanded(details),
+				).CrossAlign(primitives.CrossAxisCenter),
+			),
+		).
+			Padding(28).
+			CrossAlign(primitives.CrossAxisStretch).
+			Background(theme.ColorCanvas),
+		scrim,
+		300*time.Millisecond,
+		200*time.Millisecond,
+	)
 }
+
+// playerScreen animates the full-screen player surface in: the scrim fades
+// in over 200ms and the panel slides up from +28px while fading in over 300ms
+// (M3EmphasizedDecelerate), respecting the reduced-motion preference.
+type playerScreen struct {
+	widget.WidgetBase
+	panel    widget.Widget
+	scrim    widget.Widget
+	start    time.Time
+	duration time.Duration
+	scrimDur time.Duration
+	done     bool
+}
+
+func newPlayerScreen(panel widget.Widget, scrim widget.Widget, duration, scrimDur time.Duration) *playerScreen {
+	s := &playerScreen{panel: panel, scrim: scrim, duration: duration, scrimDur: scrimDur}
+	s.SetVisible(true)
+	s.SetEnabled(true)
+	return s
+}
+
+func (s *playerScreen) Layout(ctx widget.Context, constraints geometry.Constraints) geometry.Size {
+	size := widget.LayoutChild(s.panel, ctx, constraints)
+	if setter, ok := s.panel.(interface{ SetBounds(geometry.Rect) }); ok {
+		setter.SetBounds(geometry.FromPointSize(geometry.Point{}, size))
+	}
+	s.SetBounds(geometry.FromPointSize(s.Position(), size))
+	return size
+}
+
+func (s *playerScreen) Draw(ctx widget.Context, canvas widget.Canvas) {
+	b := s.Bounds()
+	if b.IsEmpty() {
+		return
+	}
+
+	progress := float32(1)
+	scrimProgress := float32(1)
+	if !s.done {
+		if motionReduced() {
+			s.done = true
+		} else {
+			elapsed := float64(ctx.Now().Sub(s.start).Milliseconds())
+			t := elapsed / float64(s.duration)
+			if t >= 1 {
+				s.done = true
+			} else {
+				progress = easeOutCubic(float32(t))
+			}
+			st := elapsed / float64(s.scrimDur)
+			if st < 1 {
+				scrimProgress = easeOutCubic(float32(st))
+			}
+			if !s.done {
+				if sched, ok := ctx.(widget.AnimationScheduler); ok {
+					sched.ScheduleAnimationFrame()
+				} else {
+					ctx.Invalidate()
+				}
+				s.SetNeedsRedraw(true)
+			}
+		}
+	}
+
+	pushToastPaint(canvas, float32(scrimProgress), func() {
+		canvas.DrawRoundRect(b, theme.ColorCanvas.WithAlpha(0.55), 24)
+	})
+
+	canvas.PushTransform(geometry.Pt(0, (1-progress)*28))
+	pushToastPaint(canvas, progress, func() {
+		widget.StampScreenOrigin(s.panel, canvas)
+		s.panel.Draw(ctx, canvas)
+	})
+	canvas.PopTransform()
+}
+
+func (s *playerScreen) Event(ctx widget.Context, e event.Event) bool { return false }
+
+func (s *playerScreen) Children() []widget.Widget { return nil }
+
+var _ widget.Widget = (*playerScreen)(nil)
 
 func buildPlayerTransport() widget.Widget {
 	shuffle := NewVectorIconButton(IconShuffle, 38, 17, func() {

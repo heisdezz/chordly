@@ -55,6 +55,46 @@ func main() {
 			},
 		},
 		&router.Route{
+			Segment: "album",
+			Children: []*router.Route{
+				{
+					Segment: ":id",
+					Name:    "album-detail",
+					Page:    appui.AlbumPage,
+				},
+			},
+		},
+		&router.Route{
+			Segment: "artist",
+			Children: []*router.Route{
+				{
+					Segment: ":id",
+					Name:    "artist-detail",
+					Page:    appui.ArtistPage,
+				},
+			},
+		},
+		&router.Route{
+			Segment: "playlist",
+			Children: []*router.Route{
+				{
+					Segment: ":id",
+					Name:    "playlist-detail",
+					Page:    appui.PlaylistPage,
+				},
+			},
+		},
+		&router.Route{
+			Segment: "mix",
+			Children: []*router.Route{
+				{
+					Segment: ":id",
+					Name:    "mix-detail",
+					Page:    appui.MixPage,
+				},
+			},
+		},
+		&router.Route{
 			Segment: "search",
 			Name:    "search",
 			Page:    appui.SearchPage,

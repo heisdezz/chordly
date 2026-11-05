@@ -22,7 +22,7 @@ var (
 	})
 
 	// Playback Transport
-	PlaybackStatus = state.NewSignal(model.StatePlaying)
+	PlaybackStatus = state.NewSignal(model.StateStopped)
 	Playhead       = state.NewSignal(84 * time.Second) // 1:24
 	Volume         = state.NewSignal[float32](0.78)    // 78%
 	IsShuffle      = state.NewSignal(false)

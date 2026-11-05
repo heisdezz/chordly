@@ -156,6 +156,21 @@ func (s *Service) LiveSearch(ctx context.Context, query string) {
 	}()
 }
 
+// GetAlbum fetches album details and tracks from InnerTube.
+func (s *Service) GetAlbum(ctx context.Context, albumID string) (*AlbumDetails, error) {
+	return s.client.GetAlbum(ctx, albumID)
+}
+
+// GetArtist fetches artist details, top songs, and discography from InnerTube.
+func (s *Service) GetArtist(ctx context.Context, artistID string) (*ArtistDetails, error) {
+	return s.client.GetArtist(ctx, artistID)
+}
+
+// GetPlaylist fetches playlist or mix details and tracks from InnerTube.
+func (s *Service) GetPlaylist(ctx context.Context, playlistID string) (*PlaylistDetails, error) {
+	return s.client.GetPlaylist(ctx, playlistID)
+}
+
 // StartRadioForTrack fetches an automix radio queue for a seed track and replaces the queue.
 func (s *Service) StartRadioForTrack(ctx context.Context, videoID string) {
 	go func() {

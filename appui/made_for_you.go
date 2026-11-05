@@ -100,7 +100,7 @@ func newMixCard(mix model.MixCard) *button.Widget {
 	return button.New(
 		button.Text(mix.Title),
 		button.OnClick(func() {
-			// Trigger play of mix
+			Navigate("/mix/" + mix.ID)
 		}),
 		button.PainterOpt(mixCardPainter{mix: mix}),
 	)
