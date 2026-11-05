@@ -1,11 +1,9 @@
 package appui
 
 import (
-	"github.com/gogpu/ui/core/button"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/widget"
 
-	"chordly/internal/state"
 	"chordly/internal/theme"
 	"chordly/router"
 )
@@ -63,102 +61,6 @@ func HomePage(c router.RouteContext) widget.Widget {
 	return NewHomeContent()
 }
 
-// QueuePage renders the active playback queue with the current track marked.
-// It rebuilds whenever the queue or the active index changes.
-func QueuePage(c router.RouteContext) widget.Widget {
-	return newReactiveView(
-		func() widget.Widget { return buildQueueContent(c) },
-		WatchSignal(state.Queue.AsReadonly()),
-		WatchSignal(state.QueueIndex.AsReadonly()),
-	)
-}
-
-func buildQueueContent(c router.RouteContext) widget.Widget {
-	queue := state.Queue.Get()
-	currentIdx := state.QueueIndex.Get()
-
-	rows := make([]widget.Widget, 0, len(queue))
-	for i, track := range queue {
-		rows = append(rows, newQueueRow(track, i == currentIdx))
-	}
-
-	header := primitives.VBox(
-		primitives.Text("Queue").FontSize(28).Bold().Color(theme.ColorTextPrimary),
-		primitives.Text("Tracks that will play next, straight from the active queue.").
-			FontSize(13).
-			Color(theme.ColorTextSecondary),
-	).Gap(4)
-
-	var body widget.Widget
-	if len(rows) == 0 {
-		body = primitives.VBox(
-			primitives.Text("Nothing queued yet. Play a track from Home or Search to start a radio.").
-				FontSize(13).
-				Color(theme.ColorTextMuted),
-		).Padding(18).
-			Background(theme.ColorSurface).
-			Rounded(16).
-			BorderStyle(1, theme.ColorBorder)
-	} else {
-		body = primitives.VBox(
-			primitives.VBox(rows...).Gap(8),
-			primitives.HBox(
-				primitives.Expanded(primitives.Box()),
-				queueClearButton(func() {
-					state.Queue.Set(nil)
-					state.QueueIndex.Set(-1)
-					ShowInfo("Queue cleared")
-					c.Router.Replace("/")
-				}),
-			),
-		).Padding(16).
-			Gap(12).
-			Background(theme.ColorSurface).
-			Rounded(16).
-			BorderStyle(1, theme.ColorBorder)
-	}
-
-	return primitives.VBox(
-		header,
-		primitives.Box().Height(8),
-		body,
-	).
-		Padding(28).
-		Gap(10).
-		CrossAlign(primitives.CrossAxisStretch).
-		Background(theme.ColorCanvas)
-}
-
-// queueClearButton is a small theme-aware text action used by the queue page.
-type queueClearButtonPainter struct{}
-
-func (p queueClearButtonPainter) PaintButton(canvas widget.Canvas, s button.PaintState) {
-	if s.Bounds.IsEmpty() {
-		return
-	}
-	bg := widget.ColorTransparent
-	if s.Hovered {
-		bg = theme.ColorSurfaceLight
-	}
-	canvas.DrawRoundRect(s.Bounds, bg, 10)
-	canvas.DrawText(s.Text, s.Bounds, 12, theme.ColorTextMuted, false, widget.TextAlignCenter)
-}
-
-func (p queueClearButtonPainter) ButtonHeight(button.Size) float32             { return 32 }
-func (p queueClearButtonPainter) ButtonPadding(button.Size) (float32, float32) { return 14, 0 }
-func (p queueClearButtonPainter) ButtonFontSize(button.Size) float32           { return 12 }
-func (p queueClearButtonPainter) ButtonRadius() float32                        { return 10 }
-
-var _ button.Painter = queueClearButtonPainter{}
-var _ button.LayoutMetrics = queueClearButtonPainter{}
-
-func queueClearButton(onClick func()) *button.Widget {
-	return button.New(
-		button.Text("Clear queue"),
-		button.OnClick(onClick),
-		button.PainterOpt(queueClearButtonPainter{}),
-	)
-}
 
 // LyricsPage hosts the synchronized lyrics overlay as a routable page.
 func LyricsPage(c router.RouteContext) widget.Widget {

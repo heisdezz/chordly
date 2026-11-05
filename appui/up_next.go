@@ -16,6 +16,7 @@ func NewUpNextPanel() widget.Widget {
 		buildUpNextContent,
 		WatchSignal(state.Queue.AsReadonly()),
 		WatchSignal(state.QueueIndex.AsReadonly()),
+		WatchSignal(state.PlaybackStatus.AsReadonly()),
 	)
 }
 
@@ -31,8 +32,9 @@ func buildUpNextContent() widget.Widget {
 
 	items := make([]widget.Widget, 0, len(queue))
 	for i, track := range queue {
-		isActive := i == currentIdx
-		items = append(items, newQueueRow(track, isActive))
+		idx := i
+		isActive := idx == currentIdx
+		items = append(items, newInteractiveQueueRow(idx, track, isActive))
 	}
 
 	queueList := primitives.VBox(items...).Gap(8)
@@ -49,7 +51,12 @@ func buildUpNextContent() widget.Widget {
 		BorderStyle(1, theme.ColorBorder)
 }
 
+// newQueueRow renders a queue row for backwards compatibility.
 func newQueueRow(track model.Track, isActive bool) widget.Widget {
+	return newInteractiveQueueRow(-1, track, isActive)
+}
+
+func newInteractiveQueueRow(index int, track model.Track, isActive bool) widget.Widget {
 	// Thumbnail (38x38)
 	var thumbColor widget.Color = widget.Hex(0x1D2A33)
 	if isActive {
@@ -89,6 +96,20 @@ func newQueueRow(track model.Track, isActive bool) widget.Widget {
 	}
 	durText := primitives.Text(track.DurationStr).FontSize(11).Color(durColor)
 
+	var playBtn widget.Widget
+	if index >= 0 && !isActive {
+		idx := index
+		playBtn = NewVectorIconButton(IconPlay, 24, 10, func() {
+			state.PlayQueueIndex(idx)
+		}, func(s *IconButtonStyle) {
+			s.Background = widget.ColorTransparent
+			s.Foreground = theme.ColorTextMuted
+			s.BorderWidth = 0
+		})
+	} else {
+		playBtn = primitives.Box().Width(0)
+	}
+
 	row := primitives.HBox(
 		leadingIndicator,
 		thumb,
@@ -96,6 +117,7 @@ func newQueueRow(track model.Track, isActive bool) widget.Widget {
 		meta,
 		primitives.Expanded(primitives.Box()),
 		durText,
+		playBtn,
 	).
 		PaddingXY(10, 8).
 		Rounded(12).

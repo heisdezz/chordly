@@ -28,7 +28,7 @@ This directory (`docs/notes/`) holds implementation blueprints, architectural de
 | `TSK-218`    | **WS-UI**     | Full-Screen Player View (`/player`)                        | [`TSK-218-full-screen-player.md`](TSK-218-full-screen-player.md)                         | `DONE`        |
 | `TSK-219`    | **WS-UI**     | Motion & Loading Kit (Spinners, Skeletons, Transitions)    | [`TSK-219-motion-loading-kit.md`](TSK-219-motion-loading-kit.md)                         | `DONE`        |
 | `TSK-110`    | **WS-AUD/UI** | Seeking, AAC/MP4 Decode & Session Persistence              | [`TSK-110-playback-seeking-aac-session.md`](TSK-110-playback-seeking-aac-session.md)     | `DONE`        |
-| `TSK-220`    | **WS-UI**     | Queue Completion (Reorder, Save Playlist, Automix)         | [`TSK-220-queue-completion.md`](TSK-220-queue-completion.md)                             | `IN_PROGRESS` |
+| `TSK-220`    | **WS-UI**     | Queue Completion (Reorder, Save Playlist, Automix)         | [`TSK-220-queue-completion.md`](TSK-220-queue-completion.md)                             | `DONE` |
 | `TSK-221`    | **WS-UI**     | Toast Notification System                                  | Reference: `appui/toast.go`                                                              | `DONE`        |
 | `TSK-301`    | **WS-PLG**    | Wazero WASM Host                                           | Reference: `internal/plugin/host.go`                                                     | `DONE`        |
 | `TSK-302`    | **WS-PLG**    | Linux MPRIS & Media Keys                                   | [`TSK-302-mpris-linux-integration.md`](TSK-302-mpris-linux-integration.md)               | `DONE`        |
