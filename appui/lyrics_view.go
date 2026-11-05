@@ -313,6 +313,7 @@ func (w *LyricsViewWidget) Event(ctx widget.Context, e event.Event) bool {
 				if clickedIdx >= 0 && clickedIdx < len(doc.Lines) {
 					targetTS := doc.Lines[clickedIdx].Timestamp
 					appstate.Playhead.Set(targetTS)
+					SeekRequest.Set(targetTS)
 					return true
 				}
 			}

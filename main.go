@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/gogpu/ui/desktop"
 
 	"chordly/appui"
+	"chordly/internal/session"
+	"chordly/internal/state"
 	"chordly/internal/ytm"
 	"chordly/router"
 )
@@ -141,10 +144,27 @@ func main() {
 	}
 
 	// Keep the InnerTube clients in sync with the sign-in session, including
-	// future session-restore paths that set ActiveSession.
+	// future session-restore paths that set ActiveSession. Saving here means
+	// every import/clear path persists automatically.
+	sessionStore := session.Open(session.DefaultPath())
 	appui.ActiveSession.SubscribeForever(func(bundle *ytm.TokenBundle) {
 		ytm.DefaultService.SetAuth(bundle)
+		if err := sessionStore.Save(bundle); err != nil {
+			log.Printf("[Auth] session persistence unavailable: %v", err)
+		}
 	})
+
+	// Restore a previously imported session before the UI starts so search and
+	// playback are authenticated from the first frame.
+	if bundle, err := sessionStore.Load(); err == nil {
+		appui.ActiveSession.Set(bundle)
+		if bundle.AccountName != "" {
+			state.UserAccount.Set(bundle.AccountName)
+		}
+		log.Printf("[Auth] restored saved session (%s)", bundle.Summary())
+	} else if !errors.Is(err, session.ErrNotFound) {
+		log.Printf("[Auth] could not restore saved session: %v", err)
+	}
 
 	// Start the real audio pipeline (HTTP stream -> Opus decoder -> sink).
 	appui.StartPlaybackEngine()

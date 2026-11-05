@@ -151,16 +151,20 @@ func (s *ScrubberWidget) Event(ctx widget.Context, e event.Event) bool {
 	switch {
 	case me.IsPress() && bounds.Contains(me.GlobalPosition):
 		s.isDragging = true
-		s.seekFromPosition(me.GlobalPosition.X, trackStartX, trackWidth)
+		IsScrubbing.Set(true)
+		state.Playhead.Set(s.targetFromPosition(me.GlobalPosition.X, trackStartX, trackWidth))
 		return true
 
 	case me.IsDrag() && s.isDragging:
-		s.seekFromPosition(me.GlobalPosition.X, trackStartX, trackWidth)
+		state.Playhead.Set(s.targetFromPosition(me.GlobalPosition.X, trackStartX, trackWidth))
 		return true
 
 	case me.IsRelease():
 		if s.isDragging {
 			s.isDragging = false
+			IsScrubbing.Set(false)
+			// Commit on release: the engine reopens the stream at this point.
+			SeekRequest.Set(s.targetFromPosition(me.GlobalPosition.X, trackStartX, trackWidth))
 			return true
 		}
 	}
@@ -168,7 +172,8 @@ func (s *ScrubberWidget) Event(ctx widget.Context, e event.Event) bool {
 	return false
 }
 
-func (s *ScrubberWidget) seekFromPosition(mouseX, trackStartX, trackWidth float32) {
+// targetFromPosition maps a pointer X to a timestamp within the current track.
+func (s *ScrubberWidget) targetFromPosition(mouseX, trackStartX, trackWidth float32) time.Duration {
 	ratio := (mouseX - trackStartX) / trackWidth
 	if ratio < 0 {
 		ratio = 0
@@ -183,8 +188,7 @@ func (s *ScrubberWidget) seekFromPosition(mouseX, trackStartX, trackWidth float3
 		total = 237 * time.Second
 	}
 
-	target := time.Duration(float64(total) * float64(ratio))
-	state.Playhead.Set(target)
+	return time.Duration(float64(total) * float64(ratio))
 }
 
 func (s *ScrubberWidget) Children() []widget.Widget {
