@@ -1,7 +1,10 @@
 package appui
 
 import (
+	"time"
+
 	"github.com/gogpu/ui/core/button"
+	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/widget"
@@ -25,11 +28,15 @@ func NewBottomPlayer(r *router.Router) widget.Widget {
 }
 
 func buildBottomPlayer(r *router.Router) widget.Widget {
-	// The full-screen player owns the screen and hides the mini-player.
+	// The full-screen player owns the screen when expanded; while handing off
+	// to it, run the mini-player exit animation before the swap settles.
 	if r.Location().Get() == "/player" {
-		return primitives.Box()
+		return newMiniPlayerExit(buildMiniPlayer(r), miniPlayerExitDuration)
 	}
+	return buildMiniPlayer(r)
+}
 
+func buildMiniPlayer(r *router.Router) widget.Widget {
 	// Left: Album thumbnail & Metadata
 	track := state.CurrentTrack.Get()
 
@@ -209,3 +216,73 @@ func newPlayPauseButton() *button.Widget {
 		button.PainterOpt(playPauseButtonPainter{}),
 	).MinWidth(42).MaxWidth(42)
 }
+
+// miniPlayerExit animates the mini-player out (fade + slide down) as it hands
+// off to the full-screen player, over miniPlayerExitDuration
+// (M3StandardAccelerate), respecting the reduced-motion preference.
+type miniPlayerExit struct {
+	widget.WidgetBase
+	child    widget.Widget
+	start    time.Time
+	duration time.Duration
+	done     bool
+}
+
+func newMiniPlayerExit(child widget.Widget, duration time.Duration) *miniPlayerExit {
+	m := &miniPlayerExit{child: child, duration: duration}
+	m.start = time.Now()
+	m.SetVisible(true)
+	m.SetEnabled(true)
+	return m
+}
+
+func (m *miniPlayerExit) Layout(ctx widget.Context, constraints geometry.Constraints) geometry.Size {
+	size := widget.LayoutChild(m.child, ctx, constraints)
+	if setter, ok := m.child.(interface{ SetBounds(geometry.Rect) }); ok {
+		setter.SetBounds(geometry.FromPointSize(geometry.Point{}, size))
+	}
+	m.SetBounds(geometry.FromPointSize(m.Position(), size))
+	return size
+}
+
+func (m *miniPlayerExit) Draw(ctx widget.Context, canvas widget.Canvas) {
+	if m.done {
+		return
+	}
+	if motionReduced() {
+		// Reduced motion skips the exit entirely: hide immediately.
+		m.done = true
+		return
+	}
+	elapsed := float64(ctx.Now().Sub(m.start).Milliseconds())
+	t := elapsed / float64(m.duration)
+	progress := float32(1)
+	if t < 1 {
+		progress = easeOutCubic(float32(t))
+		if sched, ok := ctx.(widget.AnimationScheduler); ok {
+			sched.ScheduleAnimationFrame()
+		} else {
+			ctx.Invalidate()
+		}
+		m.SetNeedsRedraw(true)
+	}
+	canvas.PushTransform(geometry.Pt(0, 40*float32(1-progress)))
+	pushToastPaint(canvas, 1-progress, func() {
+		widget.StampScreenOrigin(m.child, canvas)
+		m.child.Draw(ctx, canvas)
+	})
+	canvas.PopTransform()
+	if t >= 1 {
+		m.done = true
+	}
+}
+
+func (m *miniPlayerExit) Event(ctx widget.Context, e event.Event) bool { return false }
+
+func (m *miniPlayerExit) Children() []widget.Widget { return nil }
+
+var _ widget.Widget = (*miniPlayerExit)(nil)
+
+// miniPlayerExitDuration is how long the mini-player takes to collapse while
+// handing off to the full-screen player.
+const miniPlayerExitDuration = 180 * time.Millisecond

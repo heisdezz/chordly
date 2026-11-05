@@ -34,3 +34,18 @@ Provide a dedicated full-screen now-playing view (`/player` route) expandable fr
 ## 3. Status
 - **Status:** `DONE`
 - **Verification:** Unit tests passing (`go test ./appui/...`) and all packages building cleanly (`go build ./...`).
+
+## 4. Mini-Player → Fullscreen Animation (Phase 1)
+
+Implemented the expansion animation for the mini-player → full-screen player handoff:
+
+- `appui/player_view.go` — new `playerScreen` wrapper around the full-screen panel:
+  - Scrim fades in (opacity 0 → 0.55) over 200 ms.
+  - Panel slides up from +28 px and fades in (opacity 0 → 1) over 250 ms, eased via `easeOutCubic`.
+  - Animation clock stamped on first draw; frame loop via `widget.AnimationScheduler` / `ctx.Invalidate`.
+  - Honors `motionReduced` (skip → instant final state).
+- `appui/bottom_player.go` — new `miniPlayerExit` wrapper for the mini-player:
+  - On `/player`, the mini-player surface is wrapped in `miniPlayerExit` (180 ms, fade + slide down).
+  - Honors `motionReduced` (skip → immediate hide).
+- Phase 2 (shared-element artwork morph + drag-to-dismiss) remains per `docs/ui/animations-plan.md` §4.
+

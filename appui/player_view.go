@@ -128,7 +128,7 @@ func buildPlayerPage(c router.RouteContext) widget.Widget {
 			CrossAlign(primitives.CrossAxisStretch).
 			Background(theme.ColorCanvas),
 		scrim,
-		300*time.Millisecond,
+		250*time.Millisecond,
 		200*time.Millisecond,
 	)
 }
@@ -169,8 +169,11 @@ func (s *playerScreen) Draw(ctx widget.Context, canvas widget.Canvas) {
 	}
 
 	progress := float32(1)
-	scrimProgress := float32(1)
+	scrim := float32(0.55)
 	if !s.done {
+		if s.start.IsZero() {
+			s.start = ctx.Now()
+		}
 		if motionReduced() {
 			s.done = true
 		} else {
@@ -182,9 +185,7 @@ func (s *playerScreen) Draw(ctx widget.Context, canvas widget.Canvas) {
 				progress = easeOutCubic(float32(t))
 			}
 			st := elapsed / float64(s.scrimDur)
-			if st < 1 {
-				scrimProgress = easeOutCubic(float32(st))
-			}
+			scrim = float32(0.55) * easeOutCubic(float32(st))
 			if !s.done {
 				if sched, ok := ctx.(widget.AnimationScheduler); ok {
 					sched.ScheduleAnimationFrame()
@@ -196,8 +197,8 @@ func (s *playerScreen) Draw(ctx widget.Context, canvas widget.Canvas) {
 		}
 	}
 
-	pushToastPaint(canvas, float32(scrimProgress), func() {
-		canvas.DrawRoundRect(b, theme.ColorCanvas.WithAlpha(0.55), 24)
+	pushToastPaint(canvas, scrim, func() {
+		canvas.DrawRoundRect(b, theme.ColorCanvas, 24)
 	})
 
 	canvas.PushTransform(geometry.Pt(0, (1-progress)*28))
