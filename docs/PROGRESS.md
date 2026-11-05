@@ -90,16 +90,16 @@ Each workstream is isolated to its own subdirectory:
 
 ### Phase 1: Parallel Backend & Engine Streams (Active)
 
-| Task ID   | Workstream | Description                                                                                               | File Scope                                                                           | Dependencies | Status                        | Owner         |
-| --------- | ---------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------ | ----------------------------- | ------------- |
-| `TSK-101` | **WS-AUD** | **Low-Latency Audio Output Driver**: Initialize sound server device (`oto/v3` or `malgo` at 48kHz stereo) | `internal/audio/device.go`, `internal/audio/device_test.go`                          | None         | `DONE`                        | Agent-Audio   |
-| `TSK-102` | **WS-AUD** | **Opus/AAC Stream Demuxer & Decoder**: Pure Go audio decoder pipeline yielding PCM frames                 | `internal/audio/decoder.go`, `internal/audio/decoder_test.go`                        | `TSK-101`    | `DONE`                        | Agent-Decoder |
-| `TSK-103` | **WS-AUD** | **Asynchronous Ring Buffer (`RingReader`)**: Pre-buffers HTTP chunks to eliminate playback jitter         | `internal/audio/buffer.go`, `internal/audio/buffer_test.go`                          | None         | `DONE`                        | Agent-Audio   |
-| `TSK-104` | **WS-YTM** | **Stream URL & Signature Deciphering**: Resolve unthrottled audio stream URLs via InnerTube / yt-dlp      | `internal/ytm/player.go`, `internal/ytm/player_test.go`                              | None         | `DONE`                        | Agent-Stream  |
-| `TSK-105` | **WS-YTM** | **Endless Radio Queue (`/next`)**: Song seeds and continuation automix generator                          | `internal/ytm/queue.go`, `internal/ytm/queue_test.go`                                | None         | `DONE`                        | Agent-Queue   |
-| `TSK-106` | **WS-LYR** | **Synchronized LRC Parser & LRCLIB Ingestion**: Parse timestamped lyrics into searchable slices           | `internal/lyrics/lrc.go`, `internal/lyrics/lrclib.go`, `internal/lyrics/lrc_test.go` | None         | `DONE`                        | Agent-Lyrics  |
-| `TSK-107` | **WS-DB**  | **SQLite Storage Engine**: Database schema for favorites, playlists, and play history                     | `internal/cache/db.go`, `internal/cache/db_test.go`                                  | None         | `DONE`                        | Agent-DB-SQL  |
-| `TSK-108` | **WS-DB**  | **Audio Chunk Disk Cache**: Transparent cache storing streamed `.webm` files to `~/.cache/chordly/audio/` | `internal/cache/disk_cache.go`, `internal/cache/disk_cache_test.go`                  | None         | `DONE`                        | Agent-DB      |
+| Task ID   | Workstream | Description                                                                                               | File Scope                                                                           | Dependencies | Status | Owner         |
+| --------- | ---------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------ | ------ | ------------- |
+| `TSK-101` | **WS-AUD** | **Low-Latency Audio Output Driver**: Initialize sound server device (`oto/v3` or `malgo` at 48kHz stereo) | `internal/audio/device.go`, `internal/audio/device_test.go`                          | None         | `DONE` | Agent-Audio   |
+| `TSK-102` | **WS-AUD** | **Opus/AAC Stream Demuxer & Decoder**: Pure Go audio decoder pipeline yielding PCM frames                 | `internal/audio/decoder.go`, `internal/audio/decoder_test.go`                        | `TSK-101`    | `DONE` | Agent-Decoder |
+| `TSK-103` | **WS-AUD** | **Asynchronous Ring Buffer (`RingReader`)**: Pre-buffers HTTP chunks to eliminate playback jitter         | `internal/audio/buffer.go`, `internal/audio/buffer_test.go`                          | None         | `DONE` | Agent-Audio   |
+| `TSK-104` | **WS-YTM** | **Stream URL & Signature Deciphering**: Resolve unthrottled audio stream URLs via InnerTube / yt-dlp      | `internal/ytm/player.go`, `internal/ytm/player_test.go`                              | None         | `DONE` | Agent-Stream  |
+| `TSK-105` | **WS-YTM** | **Endless Radio Queue (`/next`)**: Song seeds and continuation automix generator                          | `internal/ytm/queue.go`, `internal/ytm/queue_test.go`                                | None         | `DONE` | Agent-Queue   |
+| `TSK-106` | **WS-LYR** | **Synchronized LRC Parser & LRCLIB Ingestion**: Parse timestamped lyrics into searchable slices           | `internal/lyrics/lrc.go`, `internal/lyrics/lrclib.go`, `internal/lyrics/lrc_test.go` | None         | `DONE` | Agent-Lyrics  |
+| `TSK-107` | **WS-DB**  | **SQLite Storage Engine**: Database schema for favorites, playlists, and play history                     | `internal/cache/db.go`, `internal/cache/db_test.go`                                  | None         | `DONE` | Agent-DB-SQL  |
+| `TSK-108` | **WS-DB**  | **Audio Chunk Disk Cache**: Transparent cache storing streamed `.webm` files to `~/.cache/chordly/audio/` | `internal/cache/disk_cache.go`, `internal/cache/disk_cache_test.go`                  | None         | `DONE` | Agent-DB      |
 
 ---
 
@@ -115,6 +115,48 @@ Each workstream is isolated to its own subdirectory:
 
 ---
 
+### Phase 2b: UI Integration, Themability & Planning (Completed)
+
+All rows below were implemented and verified with
+`go build -mod=mod ./...` and
+`go test -mod=mod ./appui ./router ./internal/theme ./internal/lyrics`
+in commit `59940c1` (unless noted).
+
+| Task ID   | Workstream | Description                                                                                                             | File Scope                                                                                                                                                 | Dependencies | Status | Owner    |
+| --------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------ | -------- |
+| `TSK-206` | WS-UI      | **Shell + Router Integration**: mount `routerView`, wire rail/top bar/player navigation, add search/queue/lyrics routes | `main.go`, `appui/shell.go`, `appui/routerview.go`, `appui/sidebar.go`, `appui/topbar.go`, `appui/bottom_player.go`, `appui/pages.go`                      | `TSK-004`    | `DONE` | Agent-UI |
+| `TSK-207` | WS-UI      | **Reactive UI Container**: `newReactiveView`/`WatchSignal`, convert home sections and queue page from snapshots         | `appui/reactive.go`, `appui/reactive_test.go`, `appui/home_view.go`, `appui/up_next.go`, `appui/made_for_you.go`, `appui/new_releases.go`, `appui/hero.go` | `TSK-206`    | `DONE` | Agent-UI |
+| `TSK-208` | WS-THM/UI  | **Settings & Theme Picker UI**: preset cards, dark/light toggle, accent swatches, reactive palette application          | `appui/settings_view.go`, `appui/settings_view_test.go`, `internal/theme/active.go`, `internal/theme/active_test.go`                                       | `TSK-203`    | `DONE` | Agent-UI |
+| `TSK-209` | WS-UI      | **Search Text Input**: single-line field with editing keys and submit; top bar submits real query to `/search`          | `appui/textfield.go`, `appui/textfield_test.go`, `appui/topbar.go`, `appui/pages.go`                                                                       | `TSK-205`    | `DONE` | Agent-UI |
+| `TSK-210` | WS-UI      | **Lyrics Runtime Wiring**: fetch-on-track-change, playhead repaint, lyrics button, reactive bottom player/scrubber      | `appui/lyrics_view.go`, `appui/lyrics_view_test.go`, `appui/bottom_player.go`, `appui/scrubber.go`, `appui/icons.go`                                       | `TSK-204`    | `DONE` | Agent-UI |
+| `TSK-211` | WS-UI      | **Layout/Overflow Fixes**: responsive card grids, fitted text helper, theme-safe light-mode surfaces                    | `appui/textfit.go`, `appui/made_for_you.go`, `appui/new_releases.go`, `appui/settings_view.go`, `appui/hero.go`, `appui/up_next.go`                        | `TSK-207`    | `DONE` | Agent-UI |
+| `TSK-212` | WS-UI      | **UI Planning Docs**: page inventory/routes, Google sign-in + InnerTune import, motion/loading plan                     | `docs/ui/README.md`, `docs/ui/pages-plan.md`, `docs/ui/auth-signin-plan.md`, `docs/ui/animations-plan.md`                                                  | None         | `DONE` | Agent-UI |
+
+**Note for follow-up UI work:** plain `go build ./...` currently fails with an
+`inconsistent vendoring` error introduced by a concurrent `go.mod`/`go.sum`
+change. Use `-mod=mod` until the owner runs `go mod vendor` (see
+`docs/notes/UI-NOTES.md` B10).
+
+---
+
+### Phase 2c: UI Pages, Auth & Motion (Planned)
+
+Plans and acceptance criteria live in `docs/ui/`. These rows are unblocked
+unless a dependency is listed.
+
+| Task ID   | Workstream | Description                                                                                                   | File Scope                                                                                                                          | Dependencies         | Status | Owner |
+| --------- | ---------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------ | ----- |
+| `TSK-213` | WS-UI      | **Re-vendor GoGPU & Adopt Core Widgets**: textfield/clipboard, scrollview, listview, dialog, page scaffold    | `go.mod`, `vendor/`, `appui/textfield.go` (replace), `appui/page_scaffold.go`, `appui/topbar.go`                                    | vendor sync (B10)    | `TODO` | -     |
+| `TSK-214` | WS-YTM/UI  | **Google Sign-In + InnerTune Import**: token parser, SAPISIDHASH, validation, `/login` paste/cookies.txt flow | `internal/ytm/auth.go`, `internal/ytm/token.go`, `internal/state/auth.go`, `appui/signin_view.go`, `appui/login_page.go`, `main.go` | `TSK-213`            | `TODO` | -     |
+| `TSK-215` | WS-UI      | **Account Page**: account identity, session health, re-import, sign out                                       | `appui/account_view.go`, `appui/sidebar.go`                                                                                         | `TSK-214`            | `TODO` | -     |
+| `TSK-216` | WS-UI/DB   | **Library Shell**: favorites/playlists/history (auth) + downloads (local), guest CTA                          | `appui/library_view.go`, `appui/library_tabs.go`, `internal/cache/db.go` (read-only)                                                | `TSK-214`, `TSK-107` | `TODO` | -     |
+| `TSK-217` | WS-UI/YTM  | **Detail Pages**: `/album/:id`, `/artist/:id`, `/playlist/:id`, `/mix/:id` and card/row navigation            | `appui/album_view.go`, `appui/artist_view.go`, `appui/playlist_view.go`, `internal/ytm/browse.go`, `main.go`                        | WS-YTM browse APIs   | `TODO` | -     |
+| `TSK-218` | WS-UI      | **Full-Screen Player**: `/player` route + mini-player expand/collapse transition (Phase 1, then morph)        | `appui/player_view.go`, `appui/player_transition.go`, `appui/bottom_player.go`, `main.go`                                           | `TSK-219`            | `TODO` | -     |
+| `TSK-219` | WS-UI      | **Motion & Loading Kit**: motion tokens, reduced motion, skeletons/spinners, page transitions                 | `appui/motion.go`, `appui/loading.go`, `appui/routerview.go`, `internal/state/state.go`                                             | None                 | `TODO` | -     |
+| `TSK-220` | WS-UI      | **Queue Completion**: reorder, save-as-playlist, auto-append continuation, active-row indicator               | `appui/queue_view.go`, `appui/up_next.go`, `internal/state/state.go`                                                                | `TSK-217`            | `TODO` | -     |
+
+---
+
 ### Phase 3: Plugins & System Integration
 
 | Task ID   | Workstream | Description                                                                                       | File Scope                                                              | Dependencies | Status | Owner       |
@@ -123,6 +165,14 @@ Each workstream is isolated to its own subdirectory:
 | `TSK-302` | **WS-PLG** | **Linux MPRIS & Media Keys Integration**: D-Bus interface `org.mpris.MediaPlayer2.chordly`        | `internal/plugin/mpris_linux.go`, `internal/plugin/mpris_linux_test.go` | None         | `DONE` | Agent-MPRIS |
 | `TSK-303` | **WS-PLG** | **Discord Rich Presence Integration**: Discord IPC socket bridge for track and time display       | `internal/plugin/discord.go`, `internal/plugin/discord_test.go`         | None         | `DONE` | Agent-RPC   |
 | `TSK-304` | **WS-PLG** | **Last.fm / ListenBrainz Scrobbler**: 50% elapsed playback scrobble dispatcher                    | `internal/plugin/scrobbler.go`, `internal/plugin/scrobbler_test.go`     | None         | `DONE` | Agent-Scrob |
+
+---
+
+### Phase 4: Authentication & Account (Planned / Active)
+
+| Task ID      | Workstream | Description                                                                                              | File Scope                                            | Dependencies | Status                     | Owner      |
+| ------------ | ---------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------ | -------------------------- | ---------- |
+| `UI-AUTH-01` | **WS-YTM** | **Google Sign-In Token Bundle Parser**: Bundle model, format adapters, detection, required-cookie checks | `internal/ytm/token.go`, `internal/ytm/token_test.go` | None         | `IN_PROGRESS [Agent-Auth]` | Agent-Auth |
 
 ---
 
