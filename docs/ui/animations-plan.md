@@ -217,6 +217,11 @@ Implementation:
 - Follow the `TickAnimation` rule: the panel is laid out at final size; only
   paint transforms/opacity animate, so no per-frame relayout.
 
+**Status:** Phase 1 shipped in `appui/player_view.go` + `appui/bottom_player.go`
+(`TSK-218`). The player is a real `/player` route, the mini-player
+hides on that route, and the router's 200 ms fade/slide provides the entrance.
+Phase 2 (shared-element artwork morph + drag-to-dismiss) remains.
+
 ### 4.3 Phase 2: shared-element artwork morph
 
 After Phase 1 is stable:
