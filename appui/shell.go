@@ -9,12 +9,13 @@ import (
 )
 
 // NewShell builds the complete Metrolist YouTube Music application layout.
-// The shell rebuilds when the active theme palette changes.
+// The shell rebuilds when the active theme palette changes; the toast layer
+// wraps it so notifications survive those rebuilds.
 func NewShell(r *router.Router) widget.Widget {
-	return newReactiveView(
+	return NewToastHost(newReactiveView(
 		func() widget.Widget { return buildShell(r) },
 		WatchSignal(theme.SigActivePalette.AsReadonly()),
-	)
+	))
 }
 
 func buildShell(r *router.Router) widget.Widget {

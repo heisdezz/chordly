@@ -366,6 +366,11 @@ Images:
 
 ### 6.8 Dialogs, toasts, auth
 
+**Toast baseline shipped** in `appui/toast.go` (TSK-221): 200 ms enter /
+160 ms exit, 3 s info/success, 5 s warning, 6 s error, click-to-dismiss, and a
+four-toast stack above the mini-player. Remaining for UI-MOTION-08: replace the
+local timings with `Motion` tokens and disable the slide under reduced motion.
+
 - Dialog: scrim fade 150 ms; panel scale 0.96 → 1 + fade 200 ms
   (`M3EmphasizedDecelerate`); dismiss reverses in 150 ms.
 - Toast/snackbar: slide up 12 px + fade in 200 ms, auto-dismiss 4 s, slide down

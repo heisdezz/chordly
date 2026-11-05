@@ -27,8 +27,15 @@ var accentSwatches = []widget.Color{
 }
 
 // SettingsPage renders appearance, playback, and about sections.
-// The shell rebuilds this page whenever theme.ApplyPalette runs.
+// It rebuilds on theme changes (via the shell) and on reduced-motion changes.
 func SettingsPage(c router.RouteContext) widget.Widget {
+	return newReactiveView(
+		func() widget.Widget { return buildSettingsContent(c) },
+		WatchSignal(SigReducedMotion.AsReadonly()),
+	)
+}
+
+func buildSettingsContent(c router.RouteContext) widget.Widget {
 	header := primitives.VBox(
 		primitives.Text("Settings").FontSize(28).Bold().Color(theme.ColorTextPrimary),
 		primitives.Text("Appearance, playback, and application details.").
@@ -94,6 +101,8 @@ func buildAppearanceCard() widget.Widget {
 		primitives.Box().Width(28),
 		primitives.VBox(settingsLabel("Accent"), primitives.HBox(swatches...)).Gap(6),
 		primitives.Expanded(primitives.Box()),
+		primitives.VBox(settingsLabel("Motion"), motionToggle()).Gap(6),
+		primitives.Box().Width(20),
 		primitives.VBox(
 			primitives.Text(activeName).FontSize(12).Bold().Color(theme.ColorAccent),
 			primitives.Text(theme.FormatHexColor(theme.ColorAccent)).
@@ -313,6 +322,49 @@ func modeButton(label string, dark bool) *button.Widget {
 			theme.ApplyCustomAccent(theme.ActivePalette().Accent, dark)
 		}),
 		button.PainterOpt(modeButtonPainter{dark: dark}),
+	)
+}
+
+// --- Motion toggle ---
+
+type motionTogglePainter struct{}
+
+func (p motionTogglePainter) PaintButton(canvas widget.Canvas, s button.PaintState) {
+	if s.Bounds.IsEmpty() {
+		return
+	}
+
+	active := SigReducedMotion.Get()
+	bg := theme.ColorSurfaceLight
+	fg := theme.ColorTextSecondary
+	if active {
+		bg = theme.ColorAccentSoft
+		fg = theme.ColorAccent
+	}
+	if s.Hovered {
+		bg = bg.Lerp(widget.ColorWhite, 0.04)
+	}
+
+	canvas.DrawRoundRect(s.Bounds, bg, 9)
+	if !active {
+		canvas.StrokeRoundRect(s.Bounds, theme.ColorBorder, 9, 1)
+	}
+	canvas.DrawText(s.Text, s.Bounds, 11, fg, active, widget.TextAlignCenter)
+}
+
+func (p motionTogglePainter) ButtonHeight(button.Size) float32             { return 30 }
+func (p motionTogglePainter) ButtonPadding(button.Size) (float32, float32) { return 12, 0 }
+func (p motionTogglePainter) ButtonFontSize(button.Size) float32           { return 11 }
+func (p motionTogglePainter) ButtonRadius() float32                        { return 9 }
+
+var _ button.Painter = motionTogglePainter{}
+var _ button.LayoutMetrics = motionTogglePainter{}
+
+func motionToggle() *button.Widget {
+	return button.New(
+		button.Text("Reduce motion"),
+		button.OnClick(func() { SigReducedMotion.Set(!SigReducedMotion.Get()) }),
+		button.PainterOpt(motionTogglePainter{}),
 	)
 }
 

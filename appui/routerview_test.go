@@ -65,6 +65,64 @@ func TestRouterViewSwapsPageWhenLocationChanges(t *testing.T) {
 	}
 }
 
+func TestRouterViewRetainsOutgoingPageForTransition(t *testing.T) {
+	previous := SigReducedMotion.Get()
+	SigReducedMotion.Set(false)
+	t.Cleanup(func() { SigReducedMotion.Set(previous) })
+
+	r := router.New(
+		&router.Route{Segment: "", Name: "home", Page: labelPage("home")},
+		&router.Route{Segment: "projects", Name: "projects", Page: labelPage("projects")},
+	)
+	view := newRouterView(r)
+	ctx := widget.NewContext()
+	ctx.SetWindowSize(geometry.Sz(800, 600))
+	widget.MountTree(view, ctx)
+	defer widget.UnmountTree(view)
+
+	constraints := geometry.Tight(geometry.Sz(800, 600))
+	widget.LayoutChild(view, ctx, constraints)
+
+	r.Navigate("/projects")
+	widget.LayoutChild(view, ctx, constraints)
+
+	view.mu.Lock()
+	from := view.from
+	view.mu.Unlock()
+	if from == nil {
+		t.Fatal("expected outgoing page to be retained during the transition")
+	}
+}
+
+func TestRouterViewSkipsTransitionWhenReducedMotion(t *testing.T) {
+	previous := SigReducedMotion.Get()
+	SigReducedMotion.Set(true)
+	t.Cleanup(func() { SigReducedMotion.Set(previous) })
+
+	r := router.New(
+		&router.Route{Segment: "", Name: "home", Page: labelPage("home")},
+		&router.Route{Segment: "projects", Name: "projects", Page: labelPage("projects")},
+	)
+	view := newRouterView(r)
+	ctx := widget.NewContext()
+	ctx.SetWindowSize(geometry.Sz(800, 600))
+	widget.MountTree(view, ctx)
+	defer widget.UnmountTree(view)
+
+	constraints := geometry.Tight(geometry.Sz(800, 600))
+	widget.LayoutChild(view, ctx, constraints)
+
+	r.Navigate("/projects")
+	widget.LayoutChild(view, ctx, constraints)
+
+	view.mu.Lock()
+	from := view.from
+	view.mu.Unlock()
+	if from != nil {
+		t.Fatal("reduced motion should not retain the outgoing page")
+	}
+}
+
 func TestRouterViewPageIsMounted(t *testing.T) {
 	r := router.New(&router.Route{Segment: "", Name: "home", Page: labelPage("home")})
 	view := newRouterView(r)

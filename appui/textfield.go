@@ -3,6 +3,7 @@ package appui
 import (
 	"strings"
 
+	"github.com/gogpu/ui/core/textfield"
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/widget"
@@ -310,3 +311,26 @@ func (f *TextField) Unmount() {
 
 var _ widget.Widget = (*TextField)(nil)
 var _ widget.Lifecycle = (*TextField)(nil)
+
+
+// NewSearchField creates a search input widget powered by GoGPU core/textfield.
+// It supports full selection, clipboard shortcuts (Ctrl+A/C/X/V), search input
+// behavior, and reactive signal / event bindings.
+func NewSearchField(placeholder string, initial string, onChange func(string), onSubmit func(string)) widget.Widget {
+	opts := []textfield.Option{
+		textfield.Placeholder(placeholder),
+		textfield.InputTypeOpt(textfield.TypeSearch),
+	}
+	if initial != "" {
+		opts = append(opts, textfield.InitialValue(initial))
+	}
+	if onChange != nil {
+		opts = append(opts, textfield.OnChange(onChange))
+	}
+	if onSubmit != nil {
+		opts = append(opts, textfield.OnSubmit(onSubmit))
+	}
+	tf := textfield.New(opts...)
+	tf.Padding(12)
+	return tf
+}

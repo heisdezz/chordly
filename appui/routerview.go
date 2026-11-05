@@ -2,6 +2,7 @@ package appui
 
 import (
 	"sync"
+	"time"
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
@@ -29,6 +30,10 @@ type routerView struct {
 	pending    router.Match
 	hasPending bool
 	child      widget.Widget
+
+	// Outgoing page retained briefly for the fade/slide transition.
+	from            widget.Widget
+	transitionStart time.Time
 
 	unsubscribe func()
 }
@@ -96,10 +101,15 @@ func (v *routerView) Unmount() {
 	v.mu.Lock()
 	unsubscribe := v.unsubscribe
 	v.unsubscribe = nil
+	from := v.from
+	v.from = nil
 	v.mu.Unlock()
 
 	if unsubscribe != nil {
 		unsubscribe()
+	}
+	if from != nil {
+		widget.UnmountTree(from)
 	}
 }
 
@@ -132,10 +142,6 @@ func (v *routerView) sync() {
 		return
 	}
 
-	if old != nil {
-		widget.UnmountTree(old)
-	}
-
 	child := v.build(next)
 	if child == nil {
 		return
@@ -145,10 +151,25 @@ func (v *routerView) sync() {
 		widget.MountTree(child, ctx)
 	}
 
+	animate := old != nil && ctx != nil && !motionReduced()
+
 	v.mu.Lock()
+	previousFrom := v.from
+	v.from = nil
+	v.transitionStart = time.Time{}
+	if animate {
+		v.from = old
+	}
 	v.current = next
 	v.child = child
 	v.mu.Unlock()
+
+	if previousFrom != nil {
+		widget.UnmountTree(previousFrom)
+	}
+	if !animate && old != nil {
+		widget.UnmountTree(old)
+	}
 
 	v.SetNeedsRedraw(true)
 }
@@ -182,7 +203,8 @@ func (v *routerView) Layout(ctx widget.Context, constraints geometry.Constraints
 	return size
 }
 
-// Draw delegates to the active page with the view's origin applied.
+// Draw delegates to the active page. During a route change the outgoing page
+// is drawn fading out underneath the incoming page for 200ms.
 func (v *routerView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	if !v.IsVisible() {
 		return
@@ -195,10 +217,86 @@ func (v *routerView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	}
 
 	bounds := v.Bounds()
-	canvas.PushTransform(bounds.Min)
+	from, start := v.transitionState()
+	progress := float32(1)
+	if from != nil {
+		if motionReduced() {
+			v.finishTransition()
+			from = nil
+		} else {
+			if start.IsZero() {
+				start = ctx.Now()
+				v.setTransitionStart(start)
+			}
+			duration := pageTransitionDuration
+			if duration <= 0 {
+				progress = 1
+			} else {
+				progress = float32(float64(ctx.Now().Sub(start)) / float64(duration))
+			}
+			if progress >= 1 {
+				v.finishTransition()
+				from = nil
+				progress = 1
+			} else {
+				progress = easeOutCubic(progress)
+				v.requestAnimationFrame(ctx)
+			}
+		}
+	}
+
+	if from != nil {
+		if op, ok := canvas.(toastOpacityCanvas); ok {
+			op.PushOpacity(float64(1 - progress))
+			canvas.PushTransform(bounds.Min)
+			widget.StampScreenOrigin(from, canvas)
+			from.Draw(ctx, canvas)
+			canvas.PopTransform()
+			op.PopOpacity()
+		} else {
+			v.finishTransition()
+			from = nil
+			progress = 1
+		}
+	}
+
+	offset := geometry.Pt(bounds.Min.X, bounds.Min.Y+(1-progress)*8)
+	canvas.PushTransform(offset)
 	widget.StampScreenOrigin(child, canvas)
 	child.Draw(ctx, canvas)
 	canvas.PopTransform()
+}
+
+func (v *routerView) transitionState() (widget.Widget, time.Time) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.from, v.transitionStart
+}
+
+func (v *routerView) setTransitionStart(t time.Time) {
+	v.mu.Lock()
+	v.transitionStart = t
+	v.mu.Unlock()
+}
+
+func (v *routerView) finishTransition() {
+	v.mu.Lock()
+	from := v.from
+	v.from = nil
+	v.transitionStart = time.Time{}
+	v.mu.Unlock()
+	if from != nil {
+		widget.UnmountTree(from)
+	}
+}
+
+func (v *routerView) requestAnimationFrame(ctx widget.Context) {
+	if sched, ok := ctx.(widget.AnimationScheduler); ok {
+		sched.ScheduleAnimationFrame()
+	} else {
+		ctx.Invalidate()
+	}
+	v.SetNeedsRedraw(true)
 }
 
 // Event forwards input to the active page with local coordinates. The parent

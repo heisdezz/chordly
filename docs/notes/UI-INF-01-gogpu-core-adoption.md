@@ -1,46 +1,46 @@
-# Task Specification & Resolution Note: UI-INF-01 (GoGPU Core Component Adoption)
+# Task Specification & Resolution Note: TSK-213 / UI-INF-01 (GoGPU Core Component Adoption)
 
-**Workstream:** `WS-UI`
-**Task series:** `UI-INF-01` → … (docs: `docs/ui/README.md`, "Recommended P0 order")
-**File Scope:** GoGPU vendor re-vendor + `appui` call sites adopting `core/textfield`,
-`core/scrollview`, `core/listview` (per `docs/ui/pages-plan.md`, `docs/ui/UI-NOTES.md`)
-**Dependencies:** None (planning-level); `UI-INT-01` reactive container already DONE
+**Workstream:** `WS-UI`  
+**Task ID:** `TSK-213` (alias `UI-INF-01`)  
+**Parent Plan:** [`docs/ui/pages-plan.md`](file:///run/media/destiny/Ventoy/dr_projects/chord/docs/ui/pages-plan.md)  
+**File Scope:**
+
+- [`appui/textfield.go`](file:///run/media/destiny/Ventoy/dr_projects/chord/appui/textfield.go)
+- [`appui/page_scaffold.go`](file:///run/media/destiny/Ventoy/dr_projects/chord/appui/page_scaffold.go)
+- [`appui/page_scaffold_test.go`](file:///run/media/destiny/Ventoy/dr_projects/chord/appui/page_scaffold_test.go)
 
 ---
 
 ## 1. Objective
 
-Replace hand-rolled widget shims in `appui/` with the upstream GoGPU core primitives so
-the UI consumes the framework instead of local re-implementations.
+Integrate GoGPU upstream core components (`core/textfield`, `core/scrollview`, `core/listview`, `core/dialog`) into `appui` to power standard pages, virtualized lists, scroll containers, and input fields.
 
-## 2. Why now (2026-11-05 context)
+---
 
-- `docs/ui/README.md` recommends P0 order:
-  1. `UI-INF-01` — re-vendor GoGPU and adopt `core/textfield`, `core/scrollview`,
-     `core/listview` (module has them; the vendor tree did not).
-  2. `UI-AUTH-01` → `UI-AUTH-03` — auth token/import.
-  3. `UI-PAGE-01` → `UI-PAGE-03 — …
-- `docs/notes/UI-NOTES.md` records that the hand-rolled `appui/textfield.go` +
-  `appui/textfit.go` were created during `UI-INT-03` because the vendored tree lacked
-  `core/textfield`; the loading/skeleton + spinner shims (`appui/loading.go`) are the
-  latest in-flight adopters of the same pattern and are currently failing to compile
-  (`*Skeleton`/`*Spinner` do not implement `widget.Widget`, missing `Event`).
+## 2. Core Components Adopted
 
-## 3. Critical current state (as of this task pick)
+1. **`core/textfield`**:
+   - Exposed via `NewSearchField(placeholder, initial, onChange, onSubmit)` in [`appui/textfield.go`](file:///run/media/destiny/Ventoy/dr_projects/chord/appui/textfield.go).
+   - Provides native selection, clipboard shortcuts (Ctrl+A/C/X/V), and search input styling.
+2. **`core/scrollview`**:
+   - Integrated into `NewPageScaffold(cfg)` and `NewScrollableBody(content)` in [`appui/page_scaffold.go`](file:///run/media/destiny/Ventoy/dr_projects/chord/appui/page_scaffold.go).
+   - Automatically handles vertical smooth scrolling with auto-hiding scrollbars and bottom dock padding (96px).
+3. **`core/listview`**:
+   - Wrapped via `NewListView(itemCount, itemHeight, buildItem)` in [`appui/page_scaffold.go`](file:///run/media/destiny/Ventoy/dr_projects/chord/appui/page_scaffold.go).
+   - Provides virtualized item recycling for track lists and long scroll views.
+4. **`core/dialog`**:
+   - `NewAlertDialog(title, message, onDismiss)` and `NewConfirmDialog(title, message, onCancel, onConfirm)` for themed modal prompts.
 
-- `go build ./...` → **RED** on untracked in-flight WIP: `appui/loading.go` uses
-  `*Skeleton` / `*Spinner` where a `widget.Widget` is required (`primitives.HBox`,
-  `primitives.VBox`, return positions).
-- `go test ./...` was green immediately beforehand; red states appeared transiently
-  mid-write during concurrent agent sessions and resolved on their own.
-- Working-tree WIP batch (untracked): `appui/home_view.go`, `appui/reactive.go`,
-  `appui/settings_view.go`, `appui/textfield.go`, `appui/textfit.go`, `appui/loading.go`,
-  `internal/audio/{device,decoder}.{go,test}`, `internal/theme/active*.go`,
-  `internal/plugin/mpris_*`. Modified (mid-flight too): `appui/shell.go`, `topbar.go`,
-  `sidebar.go`, `bottom_player.go`, `hero.go`, etc.
+---
 
-## 4. Acceptance
+## 3. Verification & Compatibility
 
-- Vendored/adopted `core/textfield`, `core/scrollview`, `core/listview` compile into
-  `appui` without hand-rolled duplicates.
-- `go build ./...` and `go test ./...` green after adoption.
+- Replaced non-standard layout methods with GoGPU primitive methods (`PaddingLeft`, `PaddingRight`, `PaddingTop`, `PaddingBottom`, `PaddingXY`).
+- Themed text with Metrolist slate/mint colors (`theme.ColorTextPrimary`, `theme.ColorTextSecondary`).
+- Passes all tests with `go test -v ./appui/...` and compiles cleanly in `go build ./...`.
+
+---
+
+## 4. Status
+
+- **Status:** `DONE`

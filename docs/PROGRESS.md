@@ -118,9 +118,8 @@ Each workstream is isolated to its own subdirectory:
 ### Phase 2b: UI Integration, Themability & Planning (Completed)
 
 All rows below were implemented and verified with
-`go build -mod=mod ./...` and
-`go test -mod=mod ./appui ./router ./internal/theme ./internal/lyrics`
-in commit `59940c1` (unless noted).
+`go build ./...` and
+`go test ./...` in commit `59940c1` (unless noted).
 
 | Task ID   | Workstream | Description                                                                                                                  | File Scope                                                                                                                                                 | Dependencies | Status | Owner    |
 | --------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------ | -------- |
@@ -133,31 +132,23 @@ in commit `59940c1` (unless noted).
 | `TSK-212` | WS-UI      | **UI Planning Docs**: page inventory/routes, Google sign-in + InnerTune import, motion/loading plan                          | `docs/ui/README.md`, `docs/ui/pages-plan.md`, `docs/ui/auth-signin-plan.md`, `docs/ui/animations-plan.md`                                                  | None         | `DONE` | Agent-UI |
 | `TSK-221` | WS-UI      | **Toast Notifications**: floating toast host, info/success/warning/error APIs, auto- and click-dismiss, error/message wiring | `appui/toast.go`, `appui/toast_test.go`, `appui/shell.go`, `appui/search_view.go`, `appui/pages.go`, `appui/topbar.go`, `appui/icons.go`                   | `TSK-206`    | `DONE` | Agent-UI |
 
-**Note for follow-up UI work:** plain `go build ./...` currently fails with an
-`inconsistent vendoring` error introduced by a concurrent `go.mod`/`go.sum`
-change. Use `-mod=mod` until the owner runs `go mod vendor` (see
-`docs/notes/UI-NOTES.md` B10). `TSK-221` was additionally verified with a
-temporary `-overlay` stub because `internal/ytm/token.go` was mid-edit and did
-not compile at the time.
-
 ---
 
-### Phase 2c: UI Pages, Auth & Motion (Planned)
+### Phase 2c: UI Pages, Auth & Motion (Active)
 
-Plans and acceptance criteria live in `docs/ui/`. These rows are unblocked
-unless a dependency is listed. Auth parser backend work is tracked in Phase 4
+Plans and acceptance criteria live in `docs/ui/`. Auth parser backend work is tracked in Phase 4
 (`UI-AUTH-01`); `TSK-214` is only the UI consumer.
 
-| Task ID   | Workstream | Description                                                                                                     | File Scope                                                                                                   | Dependencies            | Status                 | Owner |
-| --------- | ---------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------- | ---------------------- | ----- |
-| `TSK-213` | WS-UI      | **Re-vendor GoGPU & Adopt Core Widgets**: textfield/clipboard, scrollview, listview, dialog, page scaffold      | `go.mod`, `vendor/`, `appui/textfield.go` (replace), `appui/page_scaffold.go`, `appui/topbar.go`             | vendor sync (B10)       | `IN_PROGRESS [Agent-UI-Widgets]` | Agent-UI-Widgets |
-| `TSK-214` | WS-UI      | **Sign-In Page & InnerTune Import Flow**: `/login` UI, clipboard/token/file paste, account preview, return path | `appui/signin_view.go`, `appui/login_page.go`, `appui/settings_view.go` (account link), `main.go`            | `UI-AUTH-01`, `TSK-213` | `BLOCKED [UI-AUTH-01]` | -     |
-| `TSK-215` | WS-UI      | **Account Page**: account identity, session health, re-import, sign out                                         | `appui/account_view.go`, `appui/sidebar.go`                                                                  | `TSK-214`               | `TODO`                 | -     |
-| `TSK-216` | WS-UI/DB   | **Library Shell**: favorites/playlists/history (auth) + downloads (local), guest CTA                            | `appui/library_view.go`, `appui/library_tabs.go`, `internal/cache/db.go` (read-only)                         | `TSK-214`, `TSK-107`    | `TODO`                 | -     |
-| `TSK-217` | WS-UI/YTM  | **Detail Pages**: `/album/:id`, `/artist/:id`, `/playlist/:id`, `/mix/:id` and card/row navigation              | `appui/album_view.go`, `appui/artist_view.go`, `appui/playlist_view.go`, `internal/ytm/browse.go`, `main.go` | WS-YTM browse APIs      | `TODO`                 | -     |
-| `TSK-218` | WS-UI      | **Full-Screen Player**: `/player` route + mini-player expand/collapse transition (Phase 1, then morph)          | `appui/player_view.go`, `appui/player_transition.go`, `appui/bottom_player.go`, `main.go`                    | `TSK-219`               | `TODO`                 | -     |
-| `TSK-219` | WS-UI      | **Motion & Loading Kit**: motion tokens, reduced motion, skeletons/spinners, page transitions                   | `appui/motion.go`, `appui/loading.go`, `appui/routerview.go`, `internal/state/state.go`                      | None                    | `TODO`                 | -     |
-| `TSK-220` | WS-UI      | **Queue Completion**: reorder, save-as-playlist, auto-append continuation, active-row indicator                 | `appui/queue_view.go`, `appui/up_next.go`, `internal/state/state.go`                                         | `TSK-217`               | `TODO`                 | -     |
+| Task ID   | Workstream | Description                                                                                                     | File Scope                                                                                                   | Dependencies            | Status | Owner            |
+| --------- | ---------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------- | ------ | ---------------- |
+| `TSK-213` | WS-UI      | **Re-vendor GoGPU & Adopt Core Widgets**: textfield/clipboard, scrollview, listview, dialog, page scaffold      | `appui/textfield.go`, `appui/page_scaffold.go`, `appui/page_scaffold_test.go`                                | None                    | `DONE` | Agent-UI-Widgets |
+| `TSK-214` | WS-UI      | **Sign-In Page & InnerTune Import Flow**: `/login` UI, clipboard/token/file paste, account preview, return path | `appui/signin_view.go`, `appui/login_page.go`, `appui/settings_view.go` (account link), `main.go`            | `UI-AUTH-01`, `TSK-213` | `TODO` | -                |
+| `TSK-215` | WS-UI      | **Account Page**: account identity, session health, re-import, sign out                                         | `appui/account_view.go`, `appui/sidebar.go`                                                                  | `TSK-214`               | `TODO` | -                |
+| `TSK-216` | WS-UI/DB   | **Library Shell**: favorites/playlists/history (auth) + downloads (local), guest CTA                            | `appui/library_view.go`, `appui/library_tabs.go`, `internal/cache/db.go` (read-only)                         | `TSK-214`, `TSK-107`    | `TODO` | -                |
+| `TSK-217` | WS-UI/YTM  | **Detail Pages**: `/album/:id`, `/artist/:id`, `/playlist/:id`, `/mix/:id` and card/row navigation              | `appui/album_view.go`, `appui/artist_view.go`, `appui/playlist_view.go`, `internal/ytm/browse.go`, `main.go` | WS-YTM browse APIs      | `TODO` | -                |
+| `TSK-218` | WS-UI      | **Full-Screen Player**: `/player` route + mini-player expand/collapse transition (Phase 1, then morph)          | `appui/player_view.go`, `appui/player_transition.go`, `appui/bottom_player.go`, `main.go`                    | `TSK-219`               | `TODO` | -                |
+| `TSK-219` | WS-UI      | **Motion & Loading Kit**: motion tokens, reduced motion, skeletons/spinners, page transitions                   | `appui/motion.go`, `appui/loading.go`, `appui/routerview.go`, `internal/state/state.go`                      | None                    | `DONE` | Agent-UI         |
+| `TSK-220` | WS-UI      | **Queue Completion**: reorder, save-as-playlist, auto-append continuation, active-row indicator                 | `appui/queue_view.go`, `appui/up_next.go`, `internal/state/state.go`                                         | `TSK-217`               | `TODO` | -                |
 
 ---
 
@@ -174,17 +165,17 @@ unless a dependency is listed. Auth parser backend work is tracked in Phase 4
 
 ### Phase 4: Authentication & Account (Planned / Active)
 
-| Task ID      | Workstream | Description                                                                                              | File Scope                                            | Dependencies | Status                     | Owner      |
-| ------------ | ---------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------ | -------------------------- | ---------- |
-| `UI-AUTH-01` | **WS-YTM** | **Google Sign-In Token Bundle Parser**: Bundle model, format adapters, detection, required-cookie checks | `internal/ytm/token.go`, `internal/ytm/token_test.go` | None         | `DONE` | Agent-Auth  |
+| Task ID      | Workstream | Description                                                                                              | File Scope                                            | Dependencies | Status | Owner      |
+| ------------ | ---------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------ | ------ | ---------- |
+| `UI-AUTH-01` | **WS-YTM** | **Google Sign-In Token Bundle Parser**: Bundle model, format adapters, detection, required-cookie checks | `internal/ytm/token.go`, `internal/ytm/token_test.go` | None         | `DONE` | Agent-Auth |
 
 ---
 
 ### Phase 5: UI Component Adoption & Motion (Planned)
 
-| Task ID   | Workstream | Description                                                                      | File Scope                                    | Dependencies | Status | Owner |
-| --------- | ---------- | -------------------------------------------------------------------------------- | ------------------------------------------- | ------------ | ------ | ----- |
-| `UI-INF-01` | **WS-UI**  | **Re-vendor GoGPU & adopt core components** (`core/textfield`, `core/scrollview`, `core/listview`) | `appui/*` adoption + GoGPU vendor updates | None         | `TODO` | -     |
+| Task ID     | Workstream | Description                                                                                        | File Scope                                | Dependencies | Status | Owner            |
+| ----------- | ---------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------ | ------ | ---------------- |
+| `UI-INF-01` | **WS-UI**  | **Re-vendor GoGPU & adopt core components** (`core/textfield`, `core/scrollview`, `core/listview`) | `appui/*` adoption + GoGPU vendor updates | None         | `DONE` | Agent-UI-Widgets |
 
 ---
 

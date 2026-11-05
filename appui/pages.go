@@ -107,6 +107,7 @@ func buildQueueContent(c router.RouteContext) widget.Widget {
 				queueClearButton(func() {
 					state.Queue.Set(nil)
 					state.QueueIndex.Set(-1)
+					ShowInfo("Queue cleared")
 					c.Router.Replace("/")
 				}),
 			),

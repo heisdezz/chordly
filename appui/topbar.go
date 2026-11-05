@@ -10,24 +10,24 @@ import (
 
 // NewTopBar builds the top app bar containing the search field and utility buttons.
 func NewTopBar(r *router.Router) widget.Widget {
-	searchField := NewTextField(
+	searchField := NewSearchField(
 		"Search songs, artists, albums...",
-		TextFieldInitial(state.SearchQuery.Get()),
-		TextFieldOnChange(func(value string) {
+		state.SearchQuery.Get(),
+		func(value string) {
 			state.SearchQuery.Set(value)
-		}),
-		TextFieldOnSubmit(func(query string) {
+		},
+		func(query string) {
 			if query == "" {
 				return
 			}
 			RunSearch(query)
 			r.Navigate("/search")
-		}),
+		},
 	)
 
 	// Notification button (Vector Bell)
 	bellBtn := NewVectorIconButton(IconBell, 40, 18, func() {
-		// Toggle notifications
+		ShowInfo("No new notifications")
 	})
 
 	// Fullscreen button (Vector Expand)

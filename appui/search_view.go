@@ -130,6 +130,7 @@ func searchFetch(id uint64, query string) {
 		log.Printf("[UI] Search failed for %q: %v", query, err)
 		searchErrorSignal.Set(err.Error())
 		searchResultsSignal.Set(nil)
+		ShowError("Search failed — check your connection and try again.")
 		return
 	}
 
@@ -379,12 +380,11 @@ func buildSearchContent() widget.Widget {
 	errMsg := searchErrorSignal.Get()
 
 	switch {
+	case loading && len(results) > 0:
+		// Keep previous results visible while the next query loads.
+		rows = append(rows, buildTrackList(results)...)
 	case loading:
-		rows = append(rows, buildSearchStateCard(
-			"Searching YouTube Music…",
-			fmt.Sprintf("Fetching live results for %q.", query),
-			IconSearch,
-		))
+		rows = append(rows, NewSearchLoading(query))
 	case errMsg != "":
 		rows = append(rows, buildSearchStateCard("Search failed", errMsg, IconSearch))
 	case query == "" && len(results) == 0:
@@ -438,10 +438,20 @@ func buildSearchHeader(query string) widget.Widget {
 		countText = fmt.Sprintf("%d results", count)
 	}
 
+	var trailing widget.Widget
+	switch {
+	case searchLoadingSignal.Get():
+		trailing = NewSpinner(14)
+	case countText != "":
+		trailing = primitives.Text(countText).FontSize(12).Color(theme.ColorTextSecondary)
+	default:
+		trailing = primitives.Box()
+	}
+
 	return primitives.HBox(
 		header,
 		primitives.Expanded(primitives.Box()),
-		primitives.Text(countText).FontSize(12).Color(theme.ColorTextSecondary),
+		trailing,
 	).CrossAlign(primitives.CrossAxisCenter)
 }
 
