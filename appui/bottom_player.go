@@ -15,6 +15,10 @@ import (
 	"chordly/router"
 )
 
+// miniPlayerArtSource is the mini-player artwork surface used as the shared
+// element morph source when expanding into the full-screen player.
+var miniPlayerArtSource widget.Widget
+
 // NewBottomPlayer builds the bottom player dock matching the reference UI.
 // It rebuilds on track and play/pause changes; the scrubber repaints from the
 // playhead signal without rebuilding the surrounding widget tree.
@@ -47,6 +51,8 @@ func buildMiniPlayer(r *router.Router) widget.Widget {
 		Background(widget.Hex(0x182C29)).
 		Rounded(10).
 		BorderStyle(1, theme.ColorBorder)
+
+	miniPlayerArtSource = thumb
 
 	meta := primitives.VBox(
 		primitives.Text(track.Title).FontSize(14).Bold().Color(theme.ColorTextPrimary),

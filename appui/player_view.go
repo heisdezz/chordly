@@ -130,6 +130,8 @@ func buildPlayerPage(c router.RouteContext) widget.Widget {
 		scrim,
 		250*time.Millisecond,
 		200*time.Millisecond,
+		miniPlayerArtSource,
+		NewPlayerArtwork(),
 	)
 }
 
@@ -144,10 +146,21 @@ type playerScreen struct {
 	duration time.Duration
 	scrimDur time.Duration
 	done     bool
+
+	source     widget.Widget
+	sourceRect geometry.Rect
+	targetRect geometry.Rect
+	morphStart time.Time
+	morphDur   time.Duration
+	morphDone  bool
+	target     widget.Widget
 }
 
-func newPlayerScreen(panel widget.Widget, scrim widget.Widget, duration, scrimDur time.Duration) *playerScreen {
-	s := &playerScreen{panel: panel, scrim: scrim, duration: duration, scrimDur: scrimDur}
+func newPlayerScreen(panel widget.Widget, scrim widget.Widget, duration, scrimDur time.Duration, source, target widget.Widget) *playerScreen {
+	s := &playerScreen{panel: panel, scrim: scrim, duration: duration, scrimDur: scrimDur, source: source, target: target}
+	if s.morphDur <= 0 {
+		s.morphDur = 400 * time.Millisecond
+	}
 	s.SetVisible(true)
 	s.SetEnabled(true)
 	return s
@@ -197,6 +210,48 @@ func (s *playerScreen) Draw(ctx widget.Context, canvas widget.Canvas) {
 		}
 	}
 
+	// Shared-element artwork morph: while the full-screen player is entering,
+	// crossfade the mini-player artwork into the player artwork rect over
+	// morphDur (M3Emphasized), then hand off to the panel draw.
+	if s.source != nil && !s.morphDone && !s.done {
+		mp := s.morphProgress(ctx)
+		if mp < 1 {
+			if sched, ok := ctx.(widget.AnimationScheduler); ok {
+				sched.ScheduleAnimationFrame()
+			} else {
+				ctx.Invalidate()
+			}
+			s.SetNeedsRedraw(true)
+
+			src := s.sourceRect
+			dst := s.targetRect
+			if r, ok := s.source.(interface{ Bounds() geometry.Rect }); ok && !r.Bounds().IsEmpty() {
+				src = r.Bounds()
+			}
+			if dst.IsZero() && !b.IsEmpty() {
+				dst = playerArtworkRect(b)
+			}
+			if !src.IsEmpty() && !dst.IsEmpty() && src != dst {
+				canvas.PushClip(src)
+				canvas.PushTransform(geometry.Pt(src.Min.X, src.Min.Y))
+				pushToastPaint(canvas, 0.5, func() {
+					widget.StampScreenOrigin(s.source, canvas)
+					s.source.Draw(ctx, canvas)
+				})
+				canvas.PopTransform()
+				canvas.PushTransform(geometry.Pt(dst.Min.X, dst.Min.Y))
+				pushToastPaint(canvas, 0.5, func() {
+					widget.StampScreenOrigin(s.target, canvas)
+					s.target.Draw(ctx, canvas)
+				})
+				canvas.PopTransform()
+				canvas.PopClip()
+			}
+			return
+		}
+		s.morphDone = true
+	}
+
 	pushToastPaint(canvas, scrim, func() {
 		canvas.DrawRoundRect(b, theme.ColorCanvas, 24)
 	})
@@ -214,6 +269,50 @@ func (s *playerScreen) Event(ctx widget.Context, e event.Event) bool { return fa
 func (s *playerScreen) Children() []widget.Widget { return nil }
 
 var _ widget.Widget = (*playerScreen)(nil)
+
+// morphProgress returns the eased shared-element morph progress in [0, 1].
+func (s *playerScreen) morphProgress(ctx widget.Context) float32 {
+	if s.morphDur <= 0 {
+		return 1
+	}
+	if s.morphStart.IsZero() {
+		s.morphStart = ctx.Now()
+	}
+	elapsed := float64(ctx.Now().Sub(s.morphStart).Milliseconds())
+	t := elapsed / float64(s.morphDur)
+	if t >= 1 {
+		return 1
+	}
+	return easeOutCubic(float32(t))
+}
+
+// playerArtworkRect returns the centered square artwork rect within bounds.
+func playerArtworkRect(b geometry.Rect) geometry.Rect {
+	side := b.Width()
+	if b.Height() < side {
+		side = b.Height()
+	}
+	if side > 440 {
+		side = 440
+	}
+	if side <= 0 {
+		side = 320
+	}
+	x := b.Min.X + (b.Width()-side)/2
+	y := b.Min.Y + (b.Height()-side)/2
+	return geometry.Rect{
+		Min: geometry.Pt(x, y),
+		Max: geometry.Pt(x+side, y+side),
+	}
+}
+
+// lerpRect interpolates rect a -> b by t.
+func lerpRect(a, b geometry.Rect, t float32) geometry.Rect {
+	return geometry.Rect{
+		Min: geometry.Pt(a.Min.X+(b.Min.X-a.Min.X)*t, a.Min.Y+(b.Min.Y-a.Min.Y)*t),
+		Max: geometry.Pt(a.Max.X+(b.Max.X-a.Max.X)*t, a.Max.Y+(b.Max.Y-a.Max.Y)*t),
+	}
+}
 
 func buildPlayerTransport() widget.Widget {
 	shuffle := NewVectorIconButton(IconShuffle, 38, 17, func() {
