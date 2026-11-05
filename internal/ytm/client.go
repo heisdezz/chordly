@@ -107,6 +107,7 @@ func (c *Client) applyAuth(req *http.Request, auth *TokenBundle, visitor string)
 
 	req.Header.Set("X-Goog-AuthUser", "0")
 	req.Header.Set("Origin", ytmOrigin)
+	req.Header.Set("X-Origin", ytmOrigin)
 }
 
 // sapisidHash builds the Authorization header used by YouTube Music web
