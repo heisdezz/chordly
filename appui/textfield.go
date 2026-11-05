@@ -3,7 +3,6 @@ package appui
 import (
 	"strings"
 
-	"github.com/gogpu/ui/core/textfield"
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/widget"
@@ -54,6 +53,16 @@ func TextFieldOnSubmit(fn func(string)) TextFieldOption {
 // TextFieldOnChange is called after each edit.
 func TextFieldOnChange(fn func(string)) TextFieldOption {
 	return func(f *TextField) { f.onChange = fn }
+}
+
+// TextFieldWidth sets a custom width for the input field.
+func TextFieldWidth(w float32) TextFieldOption {
+	return func(f *TextField) { f.fieldWidth = w }
+}
+
+// TextFieldHeight sets a custom height for the input field.
+func TextFieldHeight(h float32) TextFieldOption {
+	return func(f *TextField) { f.height = h }
 }
 
 // NewTextField creates a single-line input.
@@ -118,19 +127,30 @@ func (f *TextField) Draw(ctx widget.Context, canvas widget.Canvas) {
 	canvas.StrokeRoundRect(b, border, radius, width)
 
 	iconRect := geometry.Rect{
-		Min: geometry.Pt(b.Min.X+14, b.Min.Y),
-		Max: geometry.Pt(b.Min.X+32, b.Max.Y),
+		Min: geometry.Pt(b.Min.X+12, b.Min.Y),
+		Max: geometry.Pt(b.Min.X+28, b.Max.Y),
 	}
 	iconColor := theme.ColorTextMuted
 	if f.IsFocused() {
 		iconColor = theme.ColorAccent
 	}
-	DrawVectorIcon(canvas, IconSearch, iconRect, iconColor, 16)
+	DrawVectorIcon(canvas, IconSearch, iconRect, iconColor, 15)
 
-	textX := b.Min.X + 38
+	textX := b.Min.X + 34
+	rightPad := float32(14)
+	if len(f.value) > 0 {
+		rightPad = 28
+		clearCenterY := (b.Min.Y + b.Max.Y) / 2
+		clearBounds := geometry.Rect{
+			Min: geometry.Pt(b.Max.X-24, clearCenterY-8),
+			Max: geometry.Pt(b.Max.X-8, clearCenterY+8),
+		}
+		canvas.DrawText("×", clearBounds, 14, theme.ColorTextMuted, false, widget.TextAlignCenter)
+	}
+
 	textRect := geometry.Rect{
 		Min: geometry.Pt(textX, b.Min.Y),
-		Max: geometry.Pt(b.Max.X-14, b.Max.Y),
+		Max: geometry.Pt(b.Max.X-rightPad, b.Max.Y),
 	}
 
 	canvas.PushClip(textRect)
@@ -147,8 +167,8 @@ func (f *TextField) Draw(ctx widget.Context, canvas widget.Canvas) {
 			f.clickPending = false
 		}
 		caretX := textX + canvas.MeasureText(string(f.value[:f.cursor]), f.fontSize, false)
-		caretTop := b.Min.Y + 11
-		caretBottom := b.Max.Y - 11
+		caretTop := b.Min.Y + 9
+		caretBottom := b.Max.Y - 9
 		canvas.DrawLine(geometry.Pt(caretX, caretTop), geometry.Pt(caretX, caretBottom), theme.ColorAccent, 1.5)
 	}
 
@@ -160,6 +180,13 @@ func (f *TextField) Event(ctx widget.Context, e event.Event) bool {
 	switch ev := e.(type) {
 	case *event.MouseEvent:
 		if ev.IsPress() && f.Bounds().Contains(ev.GlobalPosition) {
+			// Click on clear button
+			if len(f.value) > 0 && ev.GlobalPosition.X >= f.Bounds().Max.X-26 {
+				f.value = f.value[:0]
+				f.cursor = 0
+				f.edited(ctx)
+				return true
+			}
 			if ctx != nil {
 				ctx.RequestFocus(f)
 			}
@@ -312,25 +339,22 @@ func (f *TextField) Unmount() {
 var _ widget.Widget = (*TextField)(nil)
 var _ widget.Lifecycle = (*TextField)(nil)
 
-
-// NewSearchField creates a search input widget powered by GoGPU core/textfield.
-// It supports full selection, clipboard shortcuts (Ctrl+A/C/X/V), search input
-// behavior, and reactive signal / event bindings.
-func NewSearchField(placeholder string, initial string, onChange func(string), onSubmit func(string)) widget.Widget {
-	opts := []textfield.Option{
-		textfield.Placeholder(placeholder),
-		textfield.InputTypeOpt(textfield.TypeSearch),
+// NewSearchField creates a search input widget styled as a sleek Metrolist pill.
+// Width defaults to 340px and height to 38px, matching the topbar action icons.
+func NewSearchField(placeholder string, initial string, onChange func(string), onSubmit func(string), extraOpts ...TextFieldOption) widget.Widget {
+	opts := []TextFieldOption{
+		TextFieldWidth(340),
+		TextFieldHeight(38),
 	}
 	if initial != "" {
-		opts = append(opts, textfield.InitialValue(initial))
+		opts = append(opts, TextFieldInitial(initial))
 	}
 	if onChange != nil {
-		opts = append(opts, textfield.OnChange(onChange))
+		opts = append(opts, TextFieldOnChange(onChange))
 	}
 	if onSubmit != nil {
-		opts = append(opts, textfield.OnSubmit(onSubmit))
+		opts = append(opts, TextFieldOnSubmit(onSubmit))
 	}
-	tf := textfield.New(opts...)
-	tf.Padding(12)
-	return tf
+	opts = append(opts, extraOpts...)
+	return NewTextField(placeholder, opts...)
 }

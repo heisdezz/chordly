@@ -51,6 +51,15 @@ func NewPlayerServiceWithClient(c *Client) *PlayerService {
 	}
 }
 
+// SetAuth applies an imported session to the player's InnerTube client.
+// Player requests otherwise go out anonymously and gated tracks return
+// LOGIN_REQUIRED even when the rest of the app is signed in.
+func (p *PlayerService) SetAuth(bundle *TokenBundle) {
+	if p.client != nil {
+		p.client.SetAuth(bundle)
+	}
+}
+
 // ResolveStreamURL retrieves a direct playable audio stream URL for a YouTube video ID.
 func (p *PlayerService) ResolveStreamURL(ctx context.Context, videoID string) (string, error) {
 	if videoID == "" {
@@ -89,7 +98,7 @@ func (p *PlayerService) ResolveStreamURL(ctx context.Context, videoID string) (s
 type playerResponse struct {
 	StreamingData struct {
 		AdaptiveFormats []playerFormat `json:"adaptiveFormats"`
-		Formats        []playerFormat `json:"formats"`
+		Formats         []playerFormat `json:"formats"`
 	} `json:"streamingData"`
 	PlayabilityStatus struct {
 		Status string `json:"status"`

@@ -40,7 +40,6 @@ func SignInPage(c router.RouteContext) widget.Widget {
 	)
 }
 
-
 func renderSignInView(r *router.Router) widget.Widget {
 	staged := sigStagedBundle.Get()
 	authErr := sigAuthError.Get()
@@ -93,6 +92,7 @@ func renderConnectedAccountCard(r *router.Router, accountName string) widget.Wid
 			actionButton("Sign Out", toneText, func() {
 				state.UserAccount.Set("")
 				ActiveSession.Set(nil)
+				ytm.DefaultService.ClearAuth()
 				sigStagedBundle.Set(nil)
 				ShowInfo("Signed out of YouTube Music account.")
 			}),
@@ -150,6 +150,8 @@ func renderImportCard(r *router.Router, authErr string) widget.Widget {
 		func(val string) {
 			processTokenInput(val)
 		},
+		TextFieldWidth(580),
+		TextFieldHeight(42),
 	)
 	elements = append(elements, inputField)
 
@@ -336,6 +338,9 @@ func processTokenInput(input string) {
 
 func applyValidatedSession(r *router.Router, b *ytm.TokenBundle) {
 	ActiveSession.Set(b)
+	// Apply immediately so search/player requests use the session even if the
+	// main-thread subscription is not wired yet.
+	ytm.DefaultService.SetAuth(b)
 
 	accountName := b.AccountName
 	if accountName == "" {

@@ -37,6 +37,25 @@ func (s *Service) Player() *PlayerService {
 	return s.player
 }
 
+// SetAuth applies an imported YouTube Music session to all service clients.
+// Passing nil returns the service to guest mode.
+func (s *Service) SetAuth(bundle *TokenBundle) {
+	s.client.SetAuth(bundle)
+	if s.player != nil {
+		s.player.SetAuth(bundle)
+	}
+}
+
+// ClearAuth removes the session from all clients.
+func (s *Service) ClearAuth() {
+	s.SetAuth(nil)
+}
+
+// IsLoggedIn reports whether a session is attached to the service.
+func (s *Service) IsLoggedIn() bool {
+	return s.client.HasAuth()
+}
+
 // PrepareTrackStream resolves and attaches the playable audio stream URL to a track.
 func (s *Service) PrepareTrackStream(ctx context.Context, track *model.Track) error {
 	if track.StreamURL != "" {

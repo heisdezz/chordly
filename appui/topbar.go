@@ -26,19 +26,19 @@ func NewTopBar(r *router.Router) widget.Widget {
 	)
 
 	// Notification button (Vector Bell)
-	bellBtn := NewVectorIconButton(IconBell, 40, 18, func() {
+	bellBtn := NewVectorIconButton(IconBell, 38, 17, func() {
 		ShowInfo("No new notifications")
 	})
 
 	// Fullscreen button (Vector Expand)
-	expandBtn := NewVectorIconButton(IconExpand, 40, 17, func() {
+	expandBtn := NewVectorIconButton(IconExpand, 38, 16, func() {
 		state.IsFullscreen.Set(!state.IsFullscreen.Get())
 	})
 
 	actions := primitives.HBox(
 		bellBtn,
 		expandBtn,
-	).Gap(10).CrossAlign(primitives.CrossAxisCenter)
+	).Gap(8).CrossAlign(primitives.CrossAxisCenter)
 
 	return primitives.HBox(
 		searchField,

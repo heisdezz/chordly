@@ -83,8 +83,8 @@ func NewNavRail(r *router.Router) widget.Widget {
 		s.ActiveFg = theme.ColorAccent
 	})
 
-	// Profile Avatar with green online dot
-	avatarWidget := newProfileAvatar()
+	// Profile Avatar with green online dot linking to /account
+	avatarWidget := newProfileAvatar(r)
 
 	bottomGroup := primitives.VBox(
 		settingsBtn,
@@ -155,9 +155,14 @@ func (p profileAvatarPainter) ButtonRadius() float32                        { re
 var _ button.Painter = profileAvatarPainter{}
 var _ button.LayoutMetrics = profileAvatarPainter{}
 
-func newProfileAvatar() *button.Widget {
+func newProfileAvatar(r *router.Router) *button.Widget {
 	return button.New(
 		button.Text(""),
+		button.OnClick(func() {
+			if r != nil {
+				r.Navigate("/account")
+			}
+		}),
 		button.PainterOpt(profileAvatarPainter{}),
 	).MinWidth(38).MaxWidth(38)
 }

@@ -63,6 +63,11 @@ func main() {
 			Page:    appui.SignInPage,
 		},
 		&router.Route{
+			Segment: "account",
+			Name:    "account",
+			Page:    appui.AccountPage,
+		},
+		&router.Route{
 			Segment: "*",
 			Name:    "not-found",
 			Page:    appui.NotFoundPage,
@@ -72,6 +77,12 @@ func main() {
 	if len(os.Args) > 1 {
 		routes.Replace(os.Args[1])
 	}
+
+	// Keep the InnerTube clients in sync with the sign-in session, including
+	// future session-restore paths that set ActiveSession.
+	appui.ActiveSession.SubscribeForever(func(bundle *ytm.TokenBundle) {
+		ytm.DefaultService.SetAuth(bundle)
+	})
 
 	// Trigger live YouTube Music home feed synchronization
 	ytm.DefaultService.SyncHomeData(context.Background())
