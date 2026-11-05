@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -19,16 +18,36 @@ type StreamInfo struct {
 }
 
 // PlayerService handles resolving playable audio stream URLs.
+//
+// Resolution strategy (per InnerTune services plan Module 4):
+//  1. Query `/youtubei/v1/player` with the ANDROID_MUSIC client, which serves
+//     direct `url` fields on `streamingData.adaptiveFormats` without requiring
+//     signature deciphering.
+//  2. Select the highest-fidelity audio-only format: Opus/webm (itag 251)
+//     first, AAC/mp4 (itag 140) as fallback.
+//  3. Cache the resolved URL in memory; URLs typically stay valid for ~6h, so
+//     a 4h expiry is used for safety.
 type PlayerService struct {
-	mu    sync.RWMutex
-	cache map[string]*StreamInfo
+	client *Client
+	mu     sync.RWMutex
+	cache  map[string]*StreamInfo
 }
 
 var DefaultPlayerService = NewPlayerService()
 
 func NewPlayerService() *PlayerService {
 	return &PlayerService{
-		cache: make(map[string]*StreamInfo),
+		client: NewClient(),
+		cache:  make(map[string]*StreamInfo),
+	}
+}
+
+// NewPlayerServiceWithClient allows tests and the Service facade to inject a
+// client (e.g. pointed at a stub transport).
+func NewPlayerServiceWithClient(c *Client) *PlayerService {
+	return &PlayerService{
+		client: c,
+		cache:  make(map[string]*StreamInfo),
 	}
 }
 
@@ -46,17 +65,18 @@ func (p *PlayerService) ResolveStreamURL(ctx context.Context, videoID string) (s
 		return cached.URL, nil
 	}
 
-	// 2. Resolve via fast extractor
-	streamURL, err := resolveAudioStream(ctx, videoID)
+	// 2. Resolve via InnerTube player endpoint
+	streamURL, mimeType, err := p.resolveStream(ctx, videoID)
 	if err != nil {
 		return "", fmt.Errorf("resolve audio stream for %s failed: %w", videoID, err)
 	}
 
-	// 3. Store in cache (URLs typically valid for 6 hours; expire at 4 hours for safety)
+	// 3. Store in cache (see header comment for the 4h safety expiry)
 	p.mu.Lock()
 	p.cache[videoID] = &StreamInfo{
 		VideoID:   videoID,
 		URL:       streamURL,
+		MimeType:  mimeType,
 		ExpiresAt: time.Now().Add(4 * time.Hour),
 	}
 	p.mu.Unlock()
@@ -64,32 +84,123 @@ func (p *PlayerService) ResolveStreamURL(ctx context.Context, videoID string) (s
 	return streamURL, nil
 }
 
-// resolveAudioStream executes direct audio stream resolution.
-func resolveAudioStream(ctx context.Context, videoID string) (string, error) {
-	targetURL := fmt.Sprintf("https://music.youtube.com/watch?v=%s", videoID)
+// playerResponse models the subset of `/youtubei/v1/player` needed to select
+// an audio stream.
+type playerResponse struct {
+	StreamingData struct {
+		AdaptiveFormats []playerFormat `json:"adaptiveFormats"`
+		Formats        []playerFormat `json:"formats"`
+	} `json:"streamingData"`
+	PlayabilityStatus struct {
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	} `json:"playabilityStatus"`
+}
 
-	cmd := exec.CommandContext(ctx, "yt-dlp",
-		"-g",
-		"-f", "ba[ext=m4a]/ba[ext=webm]/ba",
-		"--no-warnings",
-		"--no-playlist",
-		targetURL,
-	)
+type playerFormat struct {
+	Itag         int    `json:"itag"`
+	URL          string `json:"url"`
+	MimeType     string `json:"mimeType"`
+	AudioQuality string `json:"audioQuality"`
+}
 
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
+// resolveStream queries the player endpoint and returns the chosen URL plus
+// its mime type.
+func (p *PlayerService) resolveStream(ctx context.Context, videoID string) (string, string, error) {
+	client := p.client
+	if client == nil {
+		client = NewClient()
 	}
 
-	streamURL := strings.TrimSpace(string(out))
-	if !strings.HasPrefix(streamURL, "http") {
-		return "", fmt.Errorf("invalid stream url returned: %q", streamURL)
+	payload := RequestPayload{VideoID: videoID}
+
+	// The player endpoint must be queried with the ANDROID_MUSIC client
+	// context (WEB_REMIX is unsuitable for stream resolution: fewer direct
+	// URLs, more ciphering). Client.Do always stamps WEB_REMIX into the
+	// payload, so this call bypasses Do's context injection and reuses the
+	// client's transport instead.
+	var resp playerResponse
+	if err := client.doPlayer(ctx, payload, &resp); err != nil {
+		return "", "", err
 	}
 
-	// If multiple URLs returned (separated by newline), take the first one
-	if lines := strings.Split(streamURL, "\n"); len(lines) > 0 {
-		streamURL = strings.TrimSpace(lines[0])
+	if status := resp.PlayabilityStatus.Status; status != "" && status != "OK" {
+		reason := resp.PlayabilityStatus.Reason
+		if reason == "" {
+			reason = "unknown"
+		}
+		return "", "", NewPlayabilityError(status, reason)
 	}
 
-	return streamURL, nil
+	format := SelectAudioFormat(resp.StreamingData.AdaptiveFormats)
+	if format == nil {
+		// Some videos only expose progressive `formats` (older uploads).
+		format = SelectAudioFormat(resp.StreamingData.Formats)
+	}
+	if format == nil {
+		return "", "", errors.New("no playable audio format in player response")
+	}
+	if format.URL == "" {
+		return "", "", fmt.Errorf("audio format itag %d has no direct url (signature deciphering required)", format.Itag)
+	}
+
+	return format.URL, format.MimeType, nil
+}
+
+// SelectAudioFormat picks the best audio-only format from a list of adaptive
+// formats. Preference order:
+//  1. Opus in WebM (itag 251) — ~160kbps, 48kHz.
+//  2. AAC in MP4 (itag 140) — ~128kbps, 44.1kHz.
+//  3. Lowest itag audio format (as a last resort).
+//
+// Non-audio formats (video) are skipped.
+func SelectAudioFormat(formats []playerFormat) *playerFormat {
+	var opus, aac, fallback *playerFormat
+	for i := range formats {
+		f := &formats[i]
+		if !isAudioMime(f.MimeType) {
+			continue
+		}
+		switch {
+		case f.Itag == 251 || (strings.HasPrefix(f.MimeType, "audio/webm") && (f.Itag == 0 || f.Itag == 251)):
+			if opus == nil {
+				opus = f
+			}
+		case f.Itag == 140 || strings.HasPrefix(f.MimeType, "audio/mp4"):
+			if aac == nil {
+				aac = f
+			}
+		default:
+			if fallback == nil {
+				fallback = f
+			}
+		}
+	}
+	if opus != nil {
+		return opus
+	}
+	if aac != nil {
+		return aac
+	}
+	return fallback
+}
+
+func isAudioMime(mime string) bool {
+	return strings.HasPrefix(mime, "audio/")
+}
+
+// PlayabilityError reports a video that InnerTube refuses to serve audio for
+// (age-gated, region-blocked, removed, etc.).
+type PlayabilityError struct {
+	Status string
+	Reason string
+}
+
+func (e *PlayabilityError) Error() string {
+	return fmt.Sprintf("playability status %s: %s", e.Status, e.Reason)
+}
+
+// NewPlayabilityError wraps a non-OK status into a *PlayabilityError.
+func NewPlayabilityError(status, reason string) error {
+	return &PlayabilityError{Status: status, Reason: reason}
 }
