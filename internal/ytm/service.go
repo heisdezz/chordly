@@ -3,6 +3,7 @@ package ytm
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"chordly/internal/model"
@@ -11,8 +12,10 @@ import (
 
 // Service provides a synchronized bridge between InnerTube and the UI reactive state.
 type Service struct {
-	client *Client
-	player *PlayerService
+	client            *Client
+	player            *PlayerService
+	mu                sync.Mutex
+	continuationToken string
 }
 
 var DefaultService = NewService()
@@ -125,6 +128,64 @@ func (s *Service) LiveSearch(ctx context.Context, query string) {
 			}(tracks[0])
 
 			log.Printf("[YTM] Search for %q loaded %d live tracks", query, len(tracks))
+		}
+	}()
+}
+
+// StartRadioForTrack fetches an automix radio queue for a seed track and replaces the queue.
+func (s *Service) StartRadioForTrack(ctx context.Context, videoID string) {
+	go func() {
+		radioCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		defer cancel()
+
+		res, err := s.client.GetRadio(radioCtx, videoID)
+		if err != nil {
+			log.Printf("[YTM] Radio generation notice: %v", err)
+			return
+		}
+
+		if len(res.Tracks) > 0 {
+			s.mu.Lock()
+			s.continuationToken = res.ContinuationToken
+			s.mu.Unlock()
+
+			state.Queue.Set(res.Tracks)
+			state.QueueIndex.Set(0)
+			state.CurrentTrack.Set(res.Tracks[0])
+			state.Playhead.Set(0)
+			log.Printf("[YTM] Radio seeded %d tracks for video %s", len(res.Tracks), videoID)
+		}
+	}()
+}
+
+// FetchRadioContinuation fetches the next batch of tracks when the queue runs low.
+func (s *Service) FetchRadioContinuation(ctx context.Context) {
+	s.mu.Lock()
+	token := s.continuationToken
+	s.mu.Unlock()
+
+	if token == "" {
+		return
+	}
+
+	go func() {
+		contCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		defer cancel()
+
+		res, err := s.client.GetRadioContinuation(contCtx, token)
+		if err != nil {
+			log.Printf("[YTM] Radio continuation notice: %v", err)
+			return
+		}
+
+		if len(res.Tracks) > 0 {
+			s.mu.Lock()
+			s.continuationToken = res.ContinuationToken
+			s.mu.Unlock()
+
+			curQueue := state.Queue.Get()
+			state.Queue.Set(append(curQueue, res.Tracks...))
+			log.Printf("[YTM] Appended %d continuation radio tracks", len(res.Tracks))
 		}
 	}()
 }

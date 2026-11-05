@@ -35,11 +35,14 @@ func NewClient() *Client {
 
 // RequestPayload represents the standard YouTube InnerTube request body.
 type RequestPayload struct {
-	Context  RequestContext `json:"context"`
-	Query    string         `json:"query,omitempty"`
-	BrowseID string         `json:"browseId,omitempty"`
-	VideoID  string         `json:"videoId,omitempty"`
-	Params   string         `json:"params,omitempty"`
+	Context      RequestContext `json:"context"`
+	Query        string         `json:"query,omitempty"`
+	BrowseID     string         `json:"browseId,omitempty"`
+	VideoID      string         `json:"videoId,omitempty"`
+	PlaylistID   string         `json:"playlistId,omitempty"`
+	Continuation string         `json:"continuation,omitempty"`
+	Params       string         `json:"params,omitempty"`
+	IsAudioOnly  bool           `json:"isAudioOnly,omitempty"`
 }
 
 type RequestContext struct {
