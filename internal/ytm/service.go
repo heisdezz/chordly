@@ -48,7 +48,7 @@ func (s *Service) SetAuth(bundle *TokenBundle) {
 		log.Printf("[YTM] session cleared")
 		return
 	}
-	log.Printf("[YTM] session applied: %s", bundle)
+	log.Printf("[YTM] session applied: %s", bundle.Summary())
 }
 
 // ClearAuth removes the session from all clients.

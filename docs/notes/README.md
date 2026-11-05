@@ -23,6 +23,7 @@ This directory (`docs/notes/`) holds implementation blueprints, architectural de
 | `TSK-205`    | **WS-UI**  | Search Results View with Filter Pills                   | Reference: `appui/search_view.go`                                                    | `DONE` |
 | `TSK-213`    | **WS-UI**  | GoGPU Core Component Adoption Plan                      | [`UI-INF-01-gogpu-core-adoption.md`](UI-INF-01-gogpu-core-adoption.md)               | `DONE` |
 | `TSK-214`    | **WS-UI**  | Sign-In Page & InnerTune Import Flow                    | [`TSK-214-signin-page-innertune-import.md`](TSK-214-signin-page-innertune-import.md) | `DONE` |
+| `TSK-215`    | **WS-UI**  | Account Identity & Session Health Page (`/account`)     | [`TSK-215-account-profile-page.md`](TSK-215-account-profile-page.md)                 | `DONE` |
 | `TSK-218`    | **WS-UI**  | Full-Screen Player View (`/player`)                     | [`TSK-218-full-screen-player.md`](TSK-218-full-screen-player.md)                     | `DONE` |
 | `TSK-219`    | **WS-UI**  | Motion & Loading Kit (Spinners, Skeletons, Transitions) | [`TSK-219-motion-loading-kit.md`](TSK-219-motion-loading-kit.md)                     | `DONE` |
 | `TSK-221`    | **WS-UI**  | Toast Notification System                               | Reference: `appui/toast.go`                                                          | `DONE` |
