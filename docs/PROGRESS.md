@@ -99,7 +99,7 @@ Each workstream is isolated to its own subdirectory:
 | `TSK-105` | **WS-YTM** | **Endless Radio Queue (`/next`)**: Song seeds and continuation automix generator                          | `internal/ytm/queue.go`, `internal/ytm/queue_test.go`                                | None         | `DONE`                   | Agent-Queue  |
 | `TSK-106` | **WS-LYR** | **Synchronized LRC Parser & LRCLIB Ingestion**: Parse timestamped lyrics into searchable slices           | `internal/lyrics/lrc.go`, `internal/lyrics/lrclib.go`, `internal/lyrics/lrc_test.go` | None         | `DONE`                   | Agent-Lyrics |
 | `TSK-107` | **WS-DB**  | **SQLite Storage Engine**: Database schema for favorites, playlists, and play history                     | `internal/cache/db.go`, `internal/cache/db_test.go`                                  | None         | `TODO`                   | -            |
-| `TSK-108` | **WS-DB**  | **Audio Chunk Disk Cache**: Transparent cache storing streamed `.webm` files to `~/.cache/chordly/audio/` | `internal/cache/disk_cache.go`, `internal/cache/disk_cache_test.go`                  | None         | `IN_PROGRESS [Agent-DB]` | Agent-DB     |
+| `TSK-108` | **WS-DB**  | **Audio Chunk Disk Cache**: Transparent cache storing streamed `.webm` files to `~/.cache/chordly/audio/` | `internal/cache/disk_cache.go`, `internal/cache/disk_cache_test.go`                  | None         | `DONE`                   | Agent-DB     |
 
 ---
 
