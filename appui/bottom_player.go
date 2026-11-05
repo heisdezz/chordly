@@ -20,10 +20,16 @@ func NewBottomPlayer(r *router.Router) widget.Widget {
 		func() widget.Widget { return buildBottomPlayer(r) },
 		WatchSignal(state.CurrentTrack.AsReadonly()),
 		WatchSignal(state.PlaybackStatus.AsReadonly()),
+		WatchSignal(r.Location()),
 	)
 }
 
 func buildBottomPlayer(r *router.Router) widget.Widget {
+	// The full-screen player owns the screen and hides the mini-player.
+	if r.Location().Get() == "/player" {
+		return primitives.Box()
+	}
+
 	// Left: Album thumbnail & Metadata
 	track := state.CurrentTrack.Get()
 
@@ -128,7 +134,8 @@ func buildBottomPlayer(r *router.Router) widget.Widget {
 	})
 
 	expandBtn := NewVectorIconButton(IconExpand, 34, 16, func() {
-		state.IsFullscreen.Set(!state.IsFullscreen.Get())
+		state.IsFullscreen.Set(true)
+		r.Navigate("/player")
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.BorderWidth = 0

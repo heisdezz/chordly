@@ -32,6 +32,7 @@ const (
 	IconInfo
 	IconCheck
 	IconAlert
+	IconChevronDown
 )
 
 // DrawVectorIcon renders a crisp 2D vector icon centered in the given bounds.
@@ -244,6 +245,10 @@ func DrawVectorIcon(canvas widget.Canvas, icon IconType, bounds geometry.Rect, c
 		// Stand
 		canvas.DrawLine(geometry.Pt(cx, cy+hs*0.2), geometry.Pt(cx, cy+hs*0.7), color, 1.8)
 		canvas.DrawLine(geometry.Pt(cx-hs*0.35, cy+hs*0.72), geometry.Pt(cx+hs*0.35, cy+hs*0.72), color, 1.8)
+
+	case IconChevronDown:
+		canvas.DrawLine(geometry.Pt(cx-hs*0.7, cy-hs*0.35), geometry.Pt(cx, cy+hs*0.35), color, 2)
+		canvas.DrawLine(geometry.Pt(cx, cy+hs*0.35), geometry.Pt(cx+hs*0.7, cy-hs*0.35), color, 2)
 
 	case IconInfo:
 		r := hs * 0.8

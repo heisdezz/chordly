@@ -122,6 +122,10 @@ var (
 	SearchQuery  = state.NewSignal("")
 	IsQueueOpen  = state.NewSignal(true)
 	IsFullscreen = state.NewSignal(false)
+
+	// Authentication & Return Navigation
+	RouteReturn = state.NewSignal("/")
+	UserAccount = state.NewSignal("") // Empty if guest, otherwise display name / handle
 )
 
 // Actions

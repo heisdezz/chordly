@@ -43,6 +43,11 @@ func main() {
 			Page:    appui.QueuePage,
 		},
 		&router.Route{
+			Segment: "player",
+			Name:    "player",
+			Page:    appui.PlayerPage,
+		},
+		&router.Route{
 			Segment: "lyrics",
 			Name:    "lyrics",
 			Page:    appui.LyricsPage,
@@ -51,6 +56,11 @@ func main() {
 			Segment: "settings",
 			Name:    "settings",
 			Page:    appui.SettingsPage,
+		},
+		&router.Route{
+			Segment: "login",
+			Name:    "login",
+			Page:    appui.SignInPage,
 		},
 		&router.Route{
 			Segment: "*",

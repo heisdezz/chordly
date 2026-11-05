@@ -57,6 +57,29 @@ type TokenBundle struct {
 	MissingRecommended []string          `json:"-"`
 }
 
+// MaskedSAPISID returns a masked representation of the SAPISID (e.g. ••••AB12).
+func (b *TokenBundle) MaskedSAPISID() string {
+	if b == nil || b.SAPISID == "" {
+		return "none"
+	}
+	if len(b.SAPISID) <= 4 {
+		return "••••"
+	}
+	return "••••" + b.SAPISID[len(b.SAPISID)-4:]
+}
+
+// Summary returns a brief human-readable overview of the bundle.
+func (b *TokenBundle) Summary() string {
+	if b == nil {
+		return "No session active"
+	}
+	src := string(b.Source)
+	if src == "" {
+		src = "custom"
+	}
+	return fmt.Sprintf("%d cookies (%s), SAPISID: %s", len(b.Cookies), src, b.MaskedSAPISID())
+}
+
 var recommendedCookies = []string{
 	"__Secure-3PSID",
 	"__Secure-3PSIDTS",
