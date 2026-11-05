@@ -32,20 +32,22 @@ func SettingsPage(c router.RouteContext) widget.Widget {
 	return newReactiveView(
 		func() widget.Widget { return buildSettingsContent(c) },
 		WatchSignal(SigReducedMotion.AsReadonly()),
+		WatchSignal(state.UserAccount),
 	)
 }
 
 func buildSettingsContent(c router.RouteContext) widget.Widget {
 	header := primitives.VBox(
 		primitives.Text("Settings").FontSize(28).Bold().Color(theme.ColorTextPrimary),
-		primitives.Text("Appearance, playback, and application details.").
+		primitives.Text("Appearance, account, playback, and application details.").
 			FontSize(13).
 			Color(theme.ColorTextSecondary),
 	).Gap(4)
 
-	return primitives.VBox(
+	pageVBox := primitives.VBox(
 		header,
 		primitives.Box().Height(4),
+		buildAccountCard(c.Router),
 		buildAppearanceCard(),
 		primitives.HBox(
 			primitives.Expanded(buildPlaybackCard()),
@@ -54,9 +56,70 @@ func buildSettingsContent(c router.RouteContext) widget.Widget {
 		),
 	).
 		Padding(24).
-		Gap(12).
+		Gap(16).
 		CrossAlign(primitives.CrossAxisStretch).
 		Background(theme.ColorCanvas)
+
+	return NewScrollableBody(pageVBox)
+}
+
+func buildAccountCard(r *router.Router) widget.Widget {
+	currAccount := state.UserAccount.Get()
+	var body []widget.Widget
+
+	if currAccount == "" {
+		body = append(body,
+			settingsKeyValue("Status", "Guest Mode (Not signed in)"),
+			settingsKeyValue("Library", "Guest preview; sign in to sync favorites, history, and playlists"),
+			primitives.Box().Height(6),
+			primitives.HBox(
+				button.New(
+					button.Text("Sign In / Import Session"),
+					button.VariantOpt(button.Filled),
+					button.OnClick(func() {
+						state.RouteReturn.Set("/settings")
+						if r != nil {
+							r.Navigate("/login")
+						}
+					}),
+				),
+			),
+		)
+	} else {
+		body = append(body,
+			settingsKeyValue("Status", "Connected"),
+			settingsKeyValue("Account", currAccount),
+			primitives.Box().Height(6),
+			primitives.HBox(
+				button.New(
+					button.Text("Manage Session"),
+					button.VariantOpt(button.Tonal),
+					button.OnClick(func() {
+						state.RouteReturn.Set("/settings")
+						if r != nil {
+							r.Navigate("/login")
+						}
+					}),
+				),
+				primitives.Box().Width(10),
+				button.New(
+					button.Text("Sign Out"),
+					button.VariantOpt(button.Outlined),
+					button.OnClick(func() {
+						state.UserAccount.Set("")
+						ActiveSession.Set(nil)
+						ShowInfo("Signed out of YouTube Music account.")
+					}),
+				),
+			),
+		)
+	}
+
+	return settingsCard(
+		"Account & Sync",
+		"YouTube Music web session and library synchronization.",
+		body...,
+	)
 }
 
 func buildAppearanceCard() widget.Widget {
