@@ -8,6 +8,7 @@ import (
 
 	"chordly/internal/state"
 	"chordly/internal/theme"
+	"chordly/router"
 )
 
 const (
@@ -15,7 +16,7 @@ const (
 )
 
 // NewNavRail renders the left vertical navigation rail matching the reference UI.
-func NewNavRail() widget.Widget {
+func NewNavRail(r *router.Router) widget.Widget {
 	// Top Brand Icon (Waveform)
 	brandIcon := primitives.HBox(
 		NewVectorIcon(IconWaveform, theme.ColorAccent, 24),
@@ -26,9 +27,10 @@ func NewNavRail() widget.Widget {
 	// Navigation Item Buttons (Vector Drawn Icons)
 	homeBtn := NewVectorIconButton(IconHome, 44, 20, func() {
 		state.ActiveNavTab.Set("home")
+		r.Navigate("/")
 	}, func(s *IconButtonStyle) {
 		s.Radius = 14
-		s.IsActive = func() bool { return state.ActiveNavTab.Get() == "home" }
+		s.IsActive = func() bool { return navActive(r, "/") }
 		s.ActiveBg = theme.ColorAccent
 		s.ActiveFg = theme.ColorOnAccent
 		s.Background = widget.ColorTransparent
@@ -38,9 +40,10 @@ func NewNavRail() widget.Widget {
 
 	exploreBtn := NewVectorIconButton(IconExplore, 44, 20, func() {
 		state.ActiveNavTab.Set("explore")
+		r.Navigate("/explore")
 	}, func(s *IconButtonStyle) {
 		s.Radius = 14
-		s.IsActive = func() bool { return state.ActiveNavTab.Get() == "explore" }
+		s.IsActive = func() bool { return navActive(r, "/explore") }
 		s.ActiveBg = theme.ColorAccent
 		s.ActiveFg = theme.ColorOnAccent
 		s.Background = widget.ColorTransparent
@@ -50,9 +53,10 @@ func NewNavRail() widget.Widget {
 
 	libraryBtn := NewVectorIconButton(IconLibrary, 44, 20, func() {
 		state.ActiveNavTab.Set("library")
+		r.Navigate("/library")
 	}, func(s *IconButtonStyle) {
 		s.Radius = 14
-		s.IsActive = func() bool { return state.ActiveNavTab.Get() == "library" }
+		s.IsActive = func() bool { return navActive(r, "/library") }
 		s.ActiveBg = theme.ColorAccent
 		s.ActiveFg = theme.ColorOnAccent
 		s.Background = widget.ColorTransparent
@@ -69,11 +73,14 @@ func NewNavRail() widget.Widget {
 	// Settings & Profile at bottom
 	settingsBtn := NewVectorIconButton(IconSettings, 42, 19, func() {
 		state.ActiveNavTab.Set("settings")
+		r.Navigate("/settings")
 	}, func(s *IconButtonStyle) {
 		s.Radius = 14
 		s.Background = widget.ColorTransparent
 		s.Foreground = theme.ColorTextMuted
 		s.BorderWidth = 0
+		s.IsActive = func() bool { return navActive(r, "/settings") }
+		s.ActiveFg = theme.ColorAccent
 	})
 
 	// Profile Avatar with green online dot
@@ -97,6 +104,15 @@ func NewNavRail() widget.Widget {
 		Background(theme.ColorSidebar).
 		BorderStyle(1, theme.ColorBorderMuted).
 		CrossAlign(primitives.CrossAxisCenter)
+}
+
+// navActive reports whether the current route is the given section root.
+func navActive(r *router.Router, prefix string) bool {
+	path := r.Match().Get().Path
+	if prefix == "/" {
+		return path == "/"
+	}
+	return path == prefix || len(path) > len(prefix) && path[:len(prefix)+1] == prefix+"/"
 }
 
 // profileAvatarPainter draws the circular user avatar with vector profile shape.

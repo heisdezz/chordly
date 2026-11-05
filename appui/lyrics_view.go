@@ -15,8 +15,10 @@ import (
 	"github.com/gogpu/ui/widget"
 
 	"chordly/internal/lyrics"
+	"chordly/internal/model"
 	appstate "chordly/internal/state"
 	"chordly/internal/theme"
+	"chordly/router"
 )
 
 var (
@@ -34,6 +36,10 @@ var (
 var (
 	lyricsClientOnce sync.Once
 	lyricsClient     *lyrics.Client
+
+	lyricsFetchMu  sync.Mutex
+	lyricsFetchID  uint64
+	lyricsFetchKey string
 )
 
 func getLyricsClient() *lyrics.Client {
@@ -44,12 +50,29 @@ func getLyricsClient() *lyrics.Client {
 }
 
 // FetchLyricsForCurrentTrack triggers background retrieval of lyrics for the currently playing track.
+// Duplicate requests for the same title/artist are ignored.
 func FetchLyricsForCurrentTrack() {
 	track := appstate.CurrentTrack.Get()
 	if strings.TrimSpace(track.Title) == "" {
+		lyricsFetchMu.Lock()
+		lyricsFetchID++
+		lyricsFetchKey = ""
+		lyricsFetchMu.Unlock()
 		ActiveLyricsDoc.Set(nil)
 		return
 	}
+
+	key := track.Title + "\x00" + track.Artist
+
+	lyricsFetchMu.Lock()
+	if lyricsFetchKey == key {
+		lyricsFetchMu.Unlock()
+		return
+	}
+	lyricsFetchKey = key
+	lyricsFetchID++
+	id := lyricsFetchID
+	lyricsFetchMu.Unlock()
 
 	LyricsLoading.Set(true)
 	go func() {
@@ -58,6 +81,18 @@ func FetchLyricsForCurrentTrack() {
 
 		durationSec := int(track.Duration.Seconds())
 		doc, err := getLyricsClient().FetchLyrics(ctx, track.Title, track.Artist, "", durationSec)
+
+		lyricsFetchMu.Lock()
+		if lyricsFetchID != id {
+			lyricsFetchMu.Unlock()
+			return
+		}
+		if err != nil {
+			// Allow a retry on the next track notification.
+			lyricsFetchKey = ""
+		}
+		lyricsFetchMu.Unlock()
+
 		if err != nil {
 			// No lyrics found or network issue: set document with fallback title
 			ActiveLyricsDoc.Set(&lyrics.LyricsDocument{
@@ -84,6 +119,9 @@ type LyricsViewWidget struct {
 	lastWheelTime time.Time
 
 	lineHeight float32
+
+	mu     sync.Mutex
+	unsubs []func()
 }
 
 // NewLyricsViewWidget constructs a new LyricsViewWidget.
@@ -95,6 +133,46 @@ func NewLyricsViewWidget() *LyricsViewWidget {
 	w.SetVisible(true)
 	w.SetEnabled(true)
 	return w
+}
+
+// Mount subscribes to playback and lyrics state. Repaints are paint-only: the
+// widget is never rebuilt, so karaoke auto-scroll stays smooth at the player's
+// playhead update rate.
+func (w *LyricsViewWidget) Mount(ctx widget.Context) {
+	repaint := func() {
+		w.SetNeedsRedraw(true)
+		ctx.Invalidate()
+	}
+
+	unsubs := []func(){
+		appstate.Playhead.SubscribeForever(func(time.Duration) { repaint() }),
+		ActiveLyricsDoc.SubscribeForever(func(*lyrics.LyricsDocument) { repaint() }),
+		LyricsLoading.SubscribeForever(func(bool) { repaint() }),
+		appstate.CurrentTrack.SubscribeForever(func(model.Track) {
+			repaint()
+			FetchLyricsForCurrentTrack()
+		}),
+	}
+
+	w.mu.Lock()
+	w.unsubs = append(w.unsubs, unsubs...)
+	w.mu.Unlock()
+
+	FetchLyricsForCurrentTrack()
+}
+
+// Unmount releases the signal subscriptions.
+func (w *LyricsViewWidget) Unmount() {
+	w.mu.Lock()
+	unsubs := w.unsubs
+	w.unsubs = nil
+	w.mu.Unlock()
+
+	for _, unsub := range unsubs {
+		if unsub != nil {
+			unsub()
+		}
+	}
 }
 
 func (w *LyricsViewWidget) Layout(ctx widget.Context, constraints geometry.Constraints) geometry.Size {
@@ -249,8 +327,9 @@ func (w *LyricsViewWidget) Children() []widget.Widget {
 }
 
 // NewLyricsOverlay builds the full overlay panel with header controls,
-// track metadata, synced pill badge, and the lyrics canvas.
-func NewLyricsOverlay() widget.Widget {
+// track metadata, synced pill badge, and the lyrics canvas. Passing a router
+// makes the close button return to the previous page.
+func NewLyricsOverlay(routers ...*router.Router) widget.Widget {
 	track := appstate.CurrentTrack.Get()
 
 	// Header
@@ -262,6 +341,9 @@ func NewLyricsOverlay() widget.Widget {
 	// Close Button
 	closeBtn := NewVectorIconButton(IconMore, 30, 14, func() {
 		IsLyricsOpen.Set(false)
+		if len(routers) > 0 && routers[0] != nil {
+			routers[0].Back()
+		}
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.Foreground = theme.ColorTextMuted

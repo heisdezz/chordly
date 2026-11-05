@@ -11,7 +11,17 @@ import (
 )
 
 // NewHeroBanner renders the "Trending" hero showcase matching the reference design.
+// It rebuilds when the live home feed replaces the current track.
 func NewHeroBanner() widget.Widget {
+	return newReactiveView(
+		buildHeroContent,
+		WatchSignal(state.CurrentTrack.AsReadonly()),
+	)
+}
+
+func buildHeroContent() widget.Widget {
+	track := state.CurrentTrack.Get()
+
 	// Badge with Vector Waveform
 	badge := primitives.HBox(
 		NewVectorIcon(IconWaveform, theme.ColorAccent, 13),
@@ -24,12 +34,23 @@ func NewHeroBanner() widget.Widget {
 		CrossAlign(primitives.CrossAxisCenter)
 
 	// Title & Artist
-	title := primitives.Text("Echoes of Tomorrow").FontSize(32).Bold().Color(theme.ColorTextPrimary)
-	subtitle := primitives.Text("Rexha Mavrick • 12.5M listeners").FontSize(13).Color(theme.ColorTextSecondary)
+	titleText := track.Title
+	if titleText == "" {
+		titleText = "Nothing playing"
+	}
+	subtitleText := track.Artist
+	if track.Listeners != "" {
+		if subtitleText != "" {
+			subtitleText += " • "
+		}
+		subtitleText += track.Listeners
+	}
+
+	title := primitives.Text(titleText).FontSize(32).Bold().Color(theme.ColorTextPrimary)
+	subtitle := primitives.Text(subtitleText).FontSize(13).Color(theme.ColorTextSecondary)
 
 	// Action buttons
 	playBtn := NewPillPlayButton(func() {
-		track := state.CurrentTrack.Get()
 		state.PlaySpecificTrack(track)
 	})
 
@@ -38,18 +59,20 @@ func NewHeroBanner() widget.Widget {
 		t.IsLiked = !t.IsLiked
 		state.CurrentTrack.Set(t)
 	}, func(s *IconButtonStyle) {
-		s.Background = widget.RGBA8(20, 32, 38, 160)
-		s.HoverBg = widget.RGBA8(30, 46, 56, 200)
-		s.BorderColor = widget.RGBA8(92, 225, 182, 60)
+		s.Background = theme.ColorSurfaceLight
+		s.HoverBg = theme.ColorSurfaceLight.Lerp(widget.ColorWhite, 0.08)
+		s.BorderColor = theme.ColorBorder
 		s.Foreground = theme.ColorTextPrimary
+		s.IsActive = func() bool { return state.CurrentTrack.Get().IsLiked }
+		s.ActiveFg = theme.ColorHeartActive
 	})
 
 	moreBtn := NewVectorIconButton(IconMore, 42, 18, func() {
 		// Context options
 	}, func(s *IconButtonStyle) {
-		s.Background = widget.RGBA8(20, 32, 38, 160)
-		s.HoverBg = widget.RGBA8(30, 46, 56, 200)
-		s.BorderColor = widget.RGBA8(92, 225, 182, 60)
+		s.Background = theme.ColorSurfaceLight
+		s.HoverBg = theme.ColorSurfaceLight.Lerp(widget.ColorWhite, 0.08)
+		s.BorderColor = theme.ColorBorder
 		s.Foreground = theme.ColorTextPrimary
 	})
 
@@ -82,9 +105,9 @@ func NewHeroBanner() widget.Widget {
 		rightArt,
 	).
 		PaddingXY(28, 24).
-		Background(widget.Hex(0x101D22)).
+		Background(theme.ColorSurface).
 		Rounded(22).
-		BorderStyle(1, widget.Hex(0x1C2F38)).
+		BorderStyle(1, theme.ColorBorder).
 		CrossAlign(primitives.CrossAxisCenter)
 }
 

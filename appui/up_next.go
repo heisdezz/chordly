@@ -9,8 +9,17 @@ import (
 	"chordly/internal/theme"
 )
 
-// NewUpNextPanel renders the "Up next" queue panel on the right.
+// NewUpNextPanel renders the "Up next" queue panel on the right. It rebuilds
+// whenever the queue or the active index changes.
 func NewUpNextPanel() widget.Widget {
+	return newReactiveView(
+		buildUpNextContent,
+		WatchSignal(state.Queue.AsReadonly()),
+		WatchSignal(state.QueueIndex.AsReadonly()),
+	)
+}
+
+func buildUpNextContent() widget.Widget {
 	header := primitives.HBox(
 		primitives.Text("Up next").FontSize(18).Bold().Color(theme.ColorTextPrimary),
 		primitives.Expanded(primitives.Box()),
@@ -35,7 +44,7 @@ func NewUpNextPanel() widget.Widget {
 	).
 		PaddingXY(18, 16).
 		Width(260).
-		Background(widget.Hex(0x10171D)).
+		Background(theme.ColorSurface).
 		Rounded(20).
 		BorderStyle(1, theme.ColorBorder)
 }

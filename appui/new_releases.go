@@ -9,8 +9,16 @@ import (
 	"chordly/internal/theme"
 )
 
-// NewNewReleasesSection renders the "New releases" row.
+// NewNewReleasesSection renders the "New releases" row. It rebuilds when the
+// live home feed replaces the release list.
 func NewNewReleasesSection() widget.Widget {
+	return newReactiveView(
+		buildNewReleasesContent,
+		WatchSignal(state.NewReleases.AsReadonly()),
+	)
+}
+
+func buildNewReleasesContent() widget.Widget {
 	header := primitives.HBox(
 		primitives.Text("New releases").FontSize(20).Bold().Color(theme.ColorTextPrimary),
 		primitives.Expanded(primitives.Box()),
@@ -18,17 +26,24 @@ func NewNewReleasesSection() widget.Widget {
 	).CrossAlign(primitives.CrossAxisCenter)
 
 	releases := state.NewReleases.Get()
-	items := make([]widget.Widget, 0, len(releases))
-	for _, track := range releases {
-		items = append(items, newReleaseTrackRow(track))
+	rows := make([]widget.Widget, 0, (len(releases)+1)/2)
+	for i := 0; i < len(releases); i += 2 {
+		cells := []widget.Widget{primitives.Expanded(newReleaseTrackRow(releases[i]))}
+		if i+1 < len(releases) {
+			cells = append(cells,
+				primitives.Box().Width(12),
+				primitives.Expanded(newReleaseTrackRow(releases[i+1])),
+			)
+		}
+		rows = append(rows, primitives.HBox(cells...))
 	}
 
-	tracksRow := primitives.HBox(items...).Gap(16)
+	tracksGrid := primitives.VBox(rows...).Gap(10)
 
 	return primitives.VBox(
 		header,
 		primitives.Box().Height(12),
-		tracksRow,
+		tracksGrid,
 	)
 }
 
@@ -79,8 +94,7 @@ func newReleaseTrackRow(track model.Track) widget.Widget {
 		moreBtn,
 	).
 		PaddingXY(12, 8).
-		Width(310).
-		Background(widget.Hex(0x121A20)).
+		Background(theme.ColorSurface).
 		Rounded(14).
 		BorderStyle(1, theme.ColorBorder).
 		CrossAlign(primitives.CrossAxisCenter)

@@ -2,6 +2,7 @@ package appui
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/gogpu/ui/event"
@@ -17,6 +18,9 @@ type ScrubberWidget struct {
 	widget.WidgetBase
 
 	isDragging bool
+
+	mu     sync.Mutex
+	unsubs []func()
 }
 
 func NewScrubberWidget() *ScrubberWidget {
@@ -24,6 +28,32 @@ func NewScrubberWidget() *ScrubberWidget {
 	s.SetVisible(true)
 	s.SetEnabled(true)
 	return s
+}
+
+// Mount repaints the scrubber whenever the playhead advances.
+func (s *ScrubberWidget) Mount(ctx widget.Context) {
+	unsub := state.Playhead.SubscribeForever(func(time.Duration) {
+		s.SetNeedsRedraw(true)
+		ctx.Invalidate()
+	})
+
+	s.mu.Lock()
+	s.unsubs = append(s.unsubs, unsub)
+	s.mu.Unlock()
+}
+
+// Unmount releases the playhead subscription.
+func (s *ScrubberWidget) Unmount() {
+	s.mu.Lock()
+	unsubs := s.unsubs
+	s.unsubs = nil
+	s.mu.Unlock()
+
+	for _, unsub := range unsubs {
+		if unsub != nil {
+			unsub()
+		}
+	}
 }
 
 func (s *ScrubberWidget) Layout(ctx widget.Context, constraints geometry.Constraints) geometry.Size {
@@ -165,6 +195,9 @@ func (s *ScrubberWidget) Children() []widget.Widget {
 type VolumeSliderWidget struct {
 	widget.WidgetBase
 	isDragging bool
+
+	mu     sync.Mutex
+	unsubs []func()
 }
 
 func NewVolumeSliderWidget() *VolumeSliderWidget {
@@ -172,6 +205,32 @@ func NewVolumeSliderWidget() *VolumeSliderWidget {
 	v.SetVisible(true)
 	v.SetEnabled(true)
 	return v
+}
+
+// Mount repaints the slider when the volume signal changes.
+func (v *VolumeSliderWidget) Mount(ctx widget.Context) {
+	unsub := state.Volume.SubscribeForever(func(float32) {
+		v.SetNeedsRedraw(true)
+		ctx.Invalidate()
+	})
+
+	v.mu.Lock()
+	v.unsubs = append(v.unsubs, unsub)
+	v.mu.Unlock()
+}
+
+// Unmount releases the volume subscription.
+func (v *VolumeSliderWidget) Unmount() {
+	v.mu.Lock()
+	unsubs := v.unsubs
+	v.unsubs = nil
+	v.mu.Unlock()
+
+	for _, unsub := range unsubs {
+		if unsub != nil {
+			unsub()
+		}
+	}
 }
 
 func (v *VolumeSliderWidget) Layout(ctx widget.Context, constraints geometry.Constraints) geometry.Size {

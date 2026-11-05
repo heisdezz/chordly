@@ -28,6 +28,7 @@ const (
 	IconHeart
 	IconMore
 	IconWaveform
+	IconLyrics
 )
 
 // DrawVectorIcon renders a crisp 2D vector icon centered in the given bounds.
@@ -226,6 +227,20 @@ func DrawVectorIcon(canvas widget.Canvas, icon IconType, bounds geometry.Rect, c
 		canvas.DrawCircle(geometry.Pt(cx-hs*0.6, cy), r, color)
 		canvas.DrawCircle(geometry.Pt(cx, cy), r, color)
 		canvas.DrawCircle(geometry.Pt(cx+hs*0.6, cy), r, color)
+
+	case IconLyrics: // Microphone
+		w := hs * 0.42
+		canvas.StrokeRoundRect(geometry.Rect{
+			Min: geometry.Pt(cx-w, cy-hs*0.9),
+			Max: geometry.Pt(cx+w, cy+hs*0.05),
+		}, color, w, 1.8)
+		// Cradle
+		canvas.DrawLine(geometry.Pt(cx-hs*0.6, cy-hs*0.1), geometry.Pt(cx-hs*0.6, cy+hs*0.2), color, 1.8)
+		canvas.DrawLine(geometry.Pt(cx-hs*0.6, cy+hs*0.2), geometry.Pt(cx+hs*0.6, cy+hs*0.2), color, 1.8)
+		canvas.DrawLine(geometry.Pt(cx+hs*0.6, cy-hs*0.1), geometry.Pt(cx+hs*0.6, cy+hs*0.2), color, 1.8)
+		// Stand
+		canvas.DrawLine(geometry.Pt(cx, cy+hs*0.2), geometry.Pt(cx, cy+hs*0.7), color, 1.8)
+		canvas.DrawLine(geometry.Pt(cx-hs*0.35, cy+hs*0.72), geometry.Pt(cx+hs*0.35, cy+hs*0.72), color, 1.8)
 
 	case IconWaveform:
 		// 4 vertical audio waveform bars

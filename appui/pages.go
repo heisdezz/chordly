@@ -1,9 +1,12 @@
 package appui
 
 import (
+	"github.com/gogpu/ui/core/button"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/widget"
 
+	"chordly/internal/state"
+	"chordly/internal/theme"
 	"chordly/router"
 )
 
@@ -55,22 +58,118 @@ func chordsFor(projectID string) []chord {
 	return []chord{{ID: "sketch-1", Name: "Untitled sketch", Notes: "No notes yet."}}
 }
 
-// HomePage is the index route.
+// HomePage is the index route and renders the live home feed.
 func HomePage(c router.RouteContext) widget.Widget {
-	return page(c.Router, c.Match,
-		heading("Chordly", "A sidebar, nested pages, and signal-driven routing."),
-		bodyText("Pick a section in the sidebar, or jump into a deep link."),
-		primitives.VBox(
-			bodyText("Every page comes from the same route tree."),
-			bodyText("Parameters captured at any depth stay available through the match."),
-		).Gap(4),
-		primitives.HBox(
-			actionButton("Browse projects", toneFilled, func() { c.Navigate("/projects") }),
-			actionButton("Open deep link", toneTonal, func() { c.Navigate("/projects/ambient/chords/verse-1") }),
-			actionButton("Trigger 404", toneText, func() { c.Navigate("/missing/page") }),
-		).Gap(8),
-		routeInspector(c.Match),
+	return NewHomeContent()
+}
+
+// QueuePage renders the active playback queue with the current track marked.
+// It rebuilds whenever the queue or the active index changes.
+func QueuePage(c router.RouteContext) widget.Widget {
+	return newReactiveView(
+		func() widget.Widget { return buildQueueContent(c) },
+		WatchSignal(state.Queue.AsReadonly()),
+		WatchSignal(state.QueueIndex.AsReadonly()),
 	)
+}
+
+func buildQueueContent(c router.RouteContext) widget.Widget {
+	queue := state.Queue.Get()
+	currentIdx := state.QueueIndex.Get()
+
+	rows := make([]widget.Widget, 0, len(queue))
+	for i, track := range queue {
+		rows = append(rows, newQueueRow(track, i == currentIdx))
+	}
+
+	header := primitives.VBox(
+		primitives.Text("Queue").FontSize(28).Bold().Color(theme.ColorTextPrimary),
+		primitives.Text("Tracks that will play next, straight from the active queue.").
+			FontSize(13).
+			Color(theme.ColorTextSecondary),
+	).Gap(4)
+
+	var body widget.Widget
+	if len(rows) == 0 {
+		body = primitives.VBox(
+			primitives.Text("Nothing queued yet. Play a track from Home or Search to start a radio.").
+				FontSize(13).
+				Color(theme.ColorTextMuted),
+		).Padding(18).
+			Background(theme.ColorSurface).
+			Rounded(16).
+			BorderStyle(1, theme.ColorBorder)
+	} else {
+		body = primitives.VBox(
+			primitives.VBox(rows...).Gap(8),
+			primitives.HBox(
+				primitives.Expanded(primitives.Box()),
+				queueClearButton(func() {
+					state.Queue.Set(nil)
+					state.QueueIndex.Set(-1)
+					c.Router.Replace("/")
+				}),
+			),
+		).Padding(16).
+			Gap(12).
+			Background(theme.ColorSurface).
+			Rounded(16).
+			BorderStyle(1, theme.ColorBorder)
+	}
+
+	return primitives.VBox(
+		header,
+		primitives.Box().Height(8),
+		body,
+	).
+		Padding(28).
+		Gap(10).
+		CrossAlign(primitives.CrossAxisStretch).
+		Background(theme.ColorCanvas)
+}
+
+// queueClearButton is a small theme-aware text action used by the queue page.
+type queueClearButtonPainter struct{}
+
+func (p queueClearButtonPainter) PaintButton(canvas widget.Canvas, s button.PaintState) {
+	if s.Bounds.IsEmpty() {
+		return
+	}
+	bg := widget.ColorTransparent
+	if s.Hovered {
+		bg = theme.ColorSurfaceLight
+	}
+	canvas.DrawRoundRect(s.Bounds, bg, 10)
+	canvas.DrawText(s.Text, s.Bounds, 12, theme.ColorTextMuted, false, widget.TextAlignCenter)
+}
+
+func (p queueClearButtonPainter) ButtonHeight(button.Size) float32             { return 32 }
+func (p queueClearButtonPainter) ButtonPadding(button.Size) (float32, float32) { return 14, 0 }
+func (p queueClearButtonPainter) ButtonFontSize(button.Size) float32           { return 12 }
+func (p queueClearButtonPainter) ButtonRadius() float32                        { return 10 }
+
+var _ button.Painter = queueClearButtonPainter{}
+var _ button.LayoutMetrics = queueClearButtonPainter{}
+
+func queueClearButton(onClick func()) *button.Widget {
+	return button.New(
+		button.Text("Clear queue"),
+		button.OnClick(onClick),
+		button.PainterOpt(queueClearButtonPainter{}),
+	)
+}
+
+// LyricsPage hosts the synchronized lyrics overlay as a routable page.
+func LyricsPage(c router.RouteContext) widget.Widget {
+	return primitives.VBox(
+		NewLyricsOverlay(c.Router),
+	).Padding(24).Background(theme.ColorCanvas)
+}
+
+// SearchPage renders the standalone search view. Queries are submitted from
+// the top-bar text field, which writes to state.SearchQuery.
+func SearchPage(c router.RouteContext) widget.Widget {
+	return primitives.VBox(NewSearchView()).Padding(24).Background(theme.ColorCanvas)
 }
 
 // ProjectsPage lists the top-level project routes.
@@ -158,23 +257,6 @@ func ChordPage(c router.RouteContext) widget.Widget {
 			actionButton("Project", toneTonal, func() {
 				c.Navigate(router.Build("/projects/:projectID", router.Params{"projectID": projectID}))
 			}),
-		).Gap(8),
-		routeInspector(c.Match),
-	)
-}
-
-// SettingsPage is a sibling top-level route.
-func SettingsPage(c router.RouteContext) widget.Widget {
-	return page(c.Router, c.Match,
-		heading("Settings", "A second top-level route, so sidebar highlighting can switch."),
-		card(
-			keyValue("theme", "light (default)"),
-			keyValue("router", "signal location + computed match"),
-			keyValue("history", "Back tracks every Navigate call"),
-		),
-		primitives.HBox(
-			actionButton("Back", toneTonal, func() { c.Router.Back() }),
-			actionButton("Home", toneText, func() { c.Navigate("/") }),
 		).Gap(8),
 		routeInspector(c.Match),
 	)

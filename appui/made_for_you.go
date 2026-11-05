@@ -11,8 +11,16 @@ import (
 	"chordly/internal/theme"
 )
 
-// NewMadeForYouSection renders the "Made for you" mix cards row.
+// NewMadeForYouSection renders the "Made for you" mix cards row. It rebuilds
+// when the live home feed replaces the mixes.
 func NewMadeForYouSection() widget.Widget {
+	return newReactiveView(
+		buildMadeForYouContent,
+		WatchSignal(state.MadeForYouMixes.AsReadonly()),
+	)
+}
+
+func buildMadeForYouContent() widget.Widget {
 	header := primitives.HBox(
 		primitives.Text("Made for you").FontSize(20).Bold().Color(theme.ColorTextPrimary),
 		primitives.Expanded(primitives.Box()),
@@ -22,7 +30,7 @@ func NewMadeForYouSection() widget.Widget {
 	mixes := state.MadeForYouMixes.Get()
 	cards := make([]widget.Widget, 0, len(mixes))
 	for _, mix := range mixes {
-		cards = append(cards, newMixCard(mix))
+		cards = append(cards, primitives.Expanded(newMixCard(mix)))
 	}
 
 	cardRow := primitives.HBox(cards...).Gap(12)
@@ -61,12 +69,13 @@ func (p mixCardPainter) PaintButton(canvas widget.Canvas, s button.PaintState) {
 	}
 	canvas.DrawRoundRect(sheenRect, widget.RGBA8(255, 255, 255, 20), 18)
 
-	// Card Title (Bottom Left)
+	// Card Title (Bottom Left), fitted so it never runs into the play button.
 	titleRect := geometry.Rect{
 		Min: geometry.Pt(b.Min.X+12, b.Max.Y-40),
 		Max: geometry.Pt(b.Max.X-44, b.Max.Y-10),
 	}
-	canvas.DrawText(p.mix.Title, titleRect, 13, widget.ColorWhite, true, widget.TextAlignLeft)
+	title := fitText(canvas, p.mix.Title, 13, true, titleRect.Width())
+	canvas.DrawText(title, titleRect, 13, widget.ColorWhite, true, widget.TextAlignLeft)
 
 	// Play button circle (Bottom Right)
 	playCenter := geometry.Pt(b.Max.X-24, b.Max.Y-24)
@@ -94,5 +103,5 @@ func newMixCard(mix model.MixCard) *button.Widget {
 			// Trigger play of mix
 		}),
 		button.PainterOpt(mixCardPainter{mix: mix}),
-	).MinWidth(120).MaxWidth(135)
+	)
 }

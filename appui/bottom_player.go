@@ -9,10 +9,21 @@ import (
 	"chordly/internal/model"
 	"chordly/internal/state"
 	"chordly/internal/theme"
+	"chordly/router"
 )
 
 // NewBottomPlayer builds the bottom player dock matching the reference UI.
-func NewBottomPlayer() widget.Widget {
+// It rebuilds on track and play/pause changes; the scrubber repaints from the
+// playhead signal without rebuilding the surrounding widget tree.
+func NewBottomPlayer(r *router.Router) widget.Widget {
+	return newReactiveView(
+		func() widget.Widget { return buildBottomPlayer(r) },
+		WatchSignal(state.CurrentTrack.AsReadonly()),
+		WatchSignal(state.PlaybackStatus.AsReadonly()),
+	)
+}
+
+func buildBottomPlayer(r *router.Router) widget.Widget {
 	// Left: Album thumbnail & Metadata
 	track := state.CurrentTrack.Get()
 
@@ -96,11 +107,24 @@ func NewBottomPlayer() widget.Widget {
 	volumeSlider := NewVolumeSliderWidget()
 
 	queueBtn := NewVectorIconButton(IconQueue, 34, 16, func() {
-		state.IsQueueOpen.Set(!state.IsQueueOpen.Get())
+		state.IsQueueOpen.Set(true)
+		r.Navigate("/queue")
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.BorderWidth = 0
 		s.Foreground = theme.ColorTextMuted
+		s.IsActive = func() bool { return navActive(r, "/queue") }
+		s.ActiveFg = theme.ColorAccent
+	})
+
+	lyricsBtn := NewVectorIconButton(IconLyrics, 34, 16, func() {
+		r.Navigate("/lyrics")
+	}, func(s *IconButtonStyle) {
+		s.Background = widget.ColorTransparent
+		s.BorderWidth = 0
+		s.Foreground = theme.ColorTextMuted
+		s.IsActive = func() bool { return navActive(r, "/lyrics") }
+		s.ActiveFg = theme.ColorAccent
 	})
 
 	expandBtn := NewVectorIconButton(IconExpand, 34, 16, func() {
@@ -114,6 +138,7 @@ func NewBottomPlayer() widget.Widget {
 	rightSection := primitives.HBox(
 		volumeSlider,
 		primitives.Box().Width(12),
+		lyricsBtn,
 		queueBtn,
 		expandBtn,
 	).CrossAlign(primitives.CrossAxisCenter).Width(240)

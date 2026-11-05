@@ -6,8 +6,10 @@ import (
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/widget"
 
 	"chordly/internal/lyrics"
+	"chordly/internal/model"
 	appstate "chordly/internal/state"
 )
 
@@ -103,5 +105,29 @@ func TestNewLyricsOverlay(t *testing.T) {
 	overlay := NewLyricsOverlay()
 	if overlay == nil {
 		t.Fatal("expected NewLyricsOverlay to return non-nil widget")
+	}
+}
+
+func TestLyricsViewWidgetMountSubscriptions(t *testing.T) {
+	old := appstate.CurrentTrack.Get()
+	appstate.CurrentTrack.Set(model.Track{})
+	t.Cleanup(func() { appstate.CurrentTrack.Set(old) })
+
+	w := NewLyricsViewWidget()
+	w.Mount(widget.NewContext())
+
+	w.mu.Lock()
+	mounted := len(w.unsubs)
+	w.mu.Unlock()
+	if mounted != 4 {
+		t.Fatalf("subscriptions after Mount = %d, want 4", mounted)
+	}
+
+	w.Unmount()
+	w.mu.Lock()
+	remaining := len(w.unsubs)
+	w.mu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("subscriptions after Unmount = %d, want 0", remaining)
 	}
 }

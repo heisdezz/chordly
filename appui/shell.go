@@ -9,34 +9,33 @@ import (
 )
 
 // NewShell builds the complete Metrolist YouTube Music application layout.
+// The shell rebuilds when the active theme palette changes.
 func NewShell(r *router.Router) widget.Widget {
+	return newReactiveView(
+		func() widget.Widget { return buildShell(r) },
+		WatchSignal(theme.SigActivePalette.AsReadonly()),
+	)
+}
+
+func buildShell(r *router.Router) widget.Widget {
 	// Left vertical navigation rail
-	rail := NewNavRail()
+	rail := NewNavRail(r)
 
 	// Top search & action header
-	topBar := NewTopBar()
+	topBar := NewTopBar(r)
 
-	// Main middle content area:
-	// - Hero showcase (Trending)
-	// - "Made for you" curated mixes
-	// - "New releases" track list
-	centerContent := primitives.VBox(
-		NewHeroBanner(),
-		primitives.Box().Height(18),
-		NewMadeForYouSection(),
-		primitives.Box().Height(18),
-		NewNewReleasesSection(),
-	).CrossAlign(primitives.CrossAxisStretch)
+	// Main middle content area: the router swaps pages in this viewport.
+	pageView := newRouterView(r)
 
 	// Horizontal viewport with center scrollable content and right "Up next" queue
 	viewport := primitives.HBox(
-		primitives.Expanded(centerContent),
+		primitives.Expanded(pageView),
 		primitives.Box().Width(16),
 		NewUpNextPanel(),
 	).CrossAlign(primitives.CrossAxisStart)
 
 	// Bottom persistent transport & scrubber dock
-	bottomPlayer := NewBottomPlayer()
+	bottomPlayer := NewBottomPlayer(r)
 
 	// Assembled right-hand main stage
 	mainStage := primitives.VBox(

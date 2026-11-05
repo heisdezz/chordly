@@ -33,6 +33,21 @@ func main() {
 			Page:    appui.HomePage,
 		},
 		&router.Route{
+			Segment: "search",
+			Name:    "search",
+			Page:    appui.SearchPage,
+		},
+		&router.Route{
+			Segment: "queue",
+			Name:    "queue",
+			Page:    appui.QueuePage,
+		},
+		&router.Route{
+			Segment: "lyrics",
+			Name:    "lyrics",
+			Page:    appui.LyricsPage,
+		},
+		&router.Route{
 			Segment: "settings",
 			Name:    "settings",
 			Page:    appui.SettingsPage,
