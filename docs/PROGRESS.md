@@ -90,28 +90,28 @@ Each workstream is isolated to its own subdirectory:
 
 ### Phase 1: Parallel Backend & Engine Streams (Active)
 
-| Task ID   | Workstream | Description                                                                                               | File Scope                                                                           | Dependencies | Status                      | Owner        |
-| --------- | ---------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------ | --------------------------- | ------------ |
-| `TSK-101` | **WS-AUD** | **Low-Latency Audio Output Driver**: Initialize sound server device (`oto/v3` or `malgo` at 48kHz stereo) | `internal/audio/device.go`, `internal/audio/device_test.go`                          | None         | `IN_PROGRESS [Agent-Audio]` | Agent-Audio  |
-| `TSK-102` | **WS-AUD** | **Opus/AAC Stream Demuxer & Decoder**: Pure Go audio decoder pipeline yielding PCM frames                 | `internal/audio/decoder.go`, `internal/audio/decoder_test.go`                        | `TSK-101`    | `TODO`                      | -            |
-| `TSK-103` | **WS-AUD** | **Asynchronous Ring Buffer (`RingReader`)**: Pre-buffers HTTP chunks to eliminate playback jitter         | `internal/audio/buffer.go`, `internal/audio/buffer_test.go`                          | None         | `DONE`                      | Agent-Audio  |
-| `TSK-104` | **WS-YTM** | **Stream URL & Signature Deciphering**: Resolve unthrottled audio stream URLs via InnerTube / yt-dlp      | `internal/ytm/player.go`, `internal/ytm/player_test.go`                              | None         | `DONE`                      | Agent-Stream |
-| `TSK-105` | **WS-YTM** | **Endless Radio Queue (`/next`)**: Song seeds and continuation automix generator                          | `internal/ytm/queue.go`, `internal/ytm/queue_test.go`                                | None         | `DONE`                      | Agent-Queue  |
-| `TSK-106` | **WS-LYR** | **Synchronized LRC Parser & LRCLIB Ingestion**: Parse timestamped lyrics into searchable slices           | `internal/lyrics/lrc.go`, `internal/lyrics/lrclib.go`, `internal/lyrics/lrc_test.go` | None         | `DONE`                      | Agent-Lyrics |
-| `TSK-107` | **WS-DB**  | **SQLite Storage Engine**: Database schema for favorites, playlists, and play history                     | `internal/cache/db.go`, `internal/cache/db_test.go`                                  | None         | `TODO`                      | -            |
-| `TSK-108` | **WS-DB**  | **Audio Chunk Disk Cache**: Transparent cache storing streamed `.webm` files to `~/.cache/chordly/audio/` | `internal/cache/disk_cache.go`, `internal/cache/disk_cache_test.go`                  | None         | `IN_PROGRESS [Agent-DB]`    | Agent-DB     |
+| Task ID   | Workstream | Description                                                                                               | File Scope                                                                           | Dependencies | Status                       | Owner        |
+| --------- | ---------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------ | ---------------------------- | ------------ |
+| `TSK-101` | **WS-AUD** | **Low-Latency Audio Output Driver**: Initialize sound server device (`oto/v3` or `malgo` at 48kHz stereo) | `internal/audio/device.go`, `internal/audio/device_test.go`                          | None         | `IN_PROGRESS [Agent-Audio]`  | Agent-Audio  |
+| `TSK-102` | **WS-AUD** | **Opus/AAC Stream Demuxer & Decoder**: Pure Go audio decoder pipeline yielding PCM frames                 | `internal/audio/decoder.go`, `internal/audio/decoder_test.go`                        | `TSK-101`    | `TODO`                       | -            |
+| `TSK-103` | **WS-AUD** | **Asynchronous Ring Buffer (`RingReader`)**: Pre-buffers HTTP chunks to eliminate playback jitter         | `internal/audio/buffer.go`, `internal/audio/buffer_test.go`                          | None         | `DONE`                       | Agent-Audio  |
+| `TSK-104` | **WS-YTM** | **Stream URL & Signature Deciphering**: Resolve unthrottled audio stream URLs via InnerTube / yt-dlp      | `internal/ytm/player.go`, `internal/ytm/player_test.go`                              | None         | `DONE`                       | Agent-Stream |
+| `TSK-105` | **WS-YTM** | **Endless Radio Queue (`/next`)**: Song seeds and continuation automix generator                          | `internal/ytm/queue.go`, `internal/ytm/queue_test.go`                                | None         | `DONE`                       | Agent-Queue  |
+| `TSK-106` | **WS-LYR** | **Synchronized LRC Parser & LRCLIB Ingestion**: Parse timestamped lyrics into searchable slices           | `internal/lyrics/lrc.go`, `internal/lyrics/lrclib.go`, `internal/lyrics/lrc_test.go` | None         | `DONE`                       | Agent-Lyrics |
+| `TSK-107` | **WS-DB**  | **SQLite Storage Engine**: Database schema for favorites, playlists, and play history                     | `internal/cache/db.go`, `internal/cache/db_test.go`                                  | None         | `IN_PROGRESS [Agent-DB-SQL]` | Agent-DB-SQL |
+| `TSK-108` | **WS-DB**  | **Audio Chunk Disk Cache**: Transparent cache storing streamed `.webm` files to `~/.cache/chordly/audio/` | `internal/cache/disk_cache.go`, `internal/cache/disk_cache_test.go`                  | None         | `IN_PROGRESS [Agent-DB]`     | Agent-DB     |
 
 ---
 
 ### Phase 2: Theming & Visual Extensibility (Parallelizable)
 
-| Task ID   | Workstream | Description                                                                                                   | File Scope                                                    | Dependencies | Status                            | Owner             |
-| --------- | ---------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------ | --------------------------------- | ----------------- |
-| `TSK-201` | **WS-THM** | **Album Art Color Quantizer**: K-Means / MMCQ extraction from 64x64 album art thumbnail                       | `internal/theme/extract.go`, `internal/theme/extract_test.go` | None         | `DONE`                            | Agent-THM         |
-| `TSK-202` | **WS-THM** | **Material You Tone Derivation & LERP Engine**: Smooth 250ms color transition ticker                          | `internal/theme/dynamic.go`, `internal/theme/dynamic_test.go` | `TSK-201`    | `DONE`                            | Agent-THM-Dynamic |
-| `TSK-203` | **WS-THM** | **Custom Theme Presets & Color Picker**: AMOLED, Material Light, Emerald, and Hex picker                      | `internal/theme/presets.go`, `internal/theme/presets_test.go` | None         | `IN_PROGRESS [Agent-THM-Presets]` | Agent-THM-Presets |
-| `TSK-204` | **WS-UI**  | **Karaoke Synced Lyrics Overlay View**: Auto-scrolling lyrics with active line highlighting and seek-on-click | `appui/lyrics_view.go`, `appui/lyrics_view_test.go`           | `TSK-106`    | `DONE`                            | Agent-UI-Lyrics   |
-| `TSK-205` | **WS-UI**  | **Search Results Page with Filter Pills**: Categorized results (`Songs`, `Albums`, `Artists`, `Playlists`)    | `appui/search_view.go`                                        | None         | `DONE`                            | Agent-UI          |
+| Task ID   | Workstream | Description                                                                                                   | File Scope                                                    | Dependencies | Status | Owner             |
+| --------- | ---------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------ | ------ | ----------------- |
+| `TSK-201` | **WS-THM** | **Album Art Color Quantizer**: K-Means / MMCQ extraction from 64x64 album art thumbnail                       | `internal/theme/extract.go`, `internal/theme/extract_test.go` | None         | `DONE` | Agent-THM         |
+| `TSK-202` | **WS-THM** | **Material You Tone Derivation & LERP Engine**: Smooth 250ms color transition ticker                          | `internal/theme/dynamic.go`, `internal/theme/dynamic_test.go` | `TSK-201`    | `DONE` | Agent-THM-Dynamic |
+| `TSK-203` | **WS-THM** | **Custom Theme Presets & Color Picker**: AMOLED, Material Light, Emerald, and Hex picker                      | `internal/theme/presets.go`, `internal/theme/presets_test.go` | None         | `DONE` | Agent-THM-Presets |
+| `TSK-204` | **WS-UI**  | **Karaoke Synced Lyrics Overlay View**: Auto-scrolling lyrics with active line highlighting and seek-on-click | `appui/lyrics_view.go`, `appui/lyrics_view_test.go`           | `TSK-106`    | `DONE` | Agent-UI-Lyrics   |
+| `TSK-205` | **WS-UI**  | **Search Results Page with Filter Pills**: Categorized results (`Songs`, `Albums`, `Artists`, `Playlists`)    | `appui/search_view.go`                                        | None         | `DONE` | Agent-UI          |
 
 ---
 
@@ -131,7 +131,7 @@ Each workstream is isolated to its own subdirectory:
 When an agent completes a task:
 
 1. Ensure all tests in that task pass: `go test -v ./<package>/...`.
-2. Commit changes with a message mentioning the Task ID: `git commit -m "[TSK-202] Implement Material You tonal derivation and LERP engine"`.
+2. Commit changes with a message mentioning the Task ID: `git commit -m "[TSK-203] Implement custom theme presets and hex color parser"`.
 3. Update this file (`docs/PROGRESS.md`):
    - Move the task to `DONE`.
    - Unblock any dependent tasks (change `BLOCKED` to `TODO`).
