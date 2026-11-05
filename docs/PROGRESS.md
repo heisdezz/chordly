@@ -121,8 +121,8 @@ Each workstream is isolated to its own subdirectory:
 | --------- | ---------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------ | --------------------------- | ----------- |
 | `TSK-301` | **WS-PLG** | **Wazero WASM Plugin Host**: Sandboxed runtime with host bindings (`log`, `fetch`, `track_event`) | `internal/plugin/host.go`, `internal/plugin/host_test.go`               | None         | `TODO`                      | -           |
 | `TSK-302` | **WS-PLG** | **Linux MPRIS & Media Keys Integration**: D-Bus interface `org.mpris.MediaPlayer2.chordly`        | `internal/plugin/mpris_linux.go`, `internal/plugin/mpris_linux_test.go` | None         | `IN_PROGRESS [Agent-MPRIS]` | Agent-MPRIS |
-| `TSK-303` | **WS-PLG** | **Discord Rich Presence Integration**: Discord IPC socket bridge for track and time display       | `internal/plugin/discord.go`, `internal/plugin/discord_test.go`         | None         | `IN_PROGRESS [Agent-RPC]`   | Agent-RPC   |
-| `TSK-304` | **WS-PLG** | **Last.fm / ListenBrainz Scrobbler**: 50% elapsed playback scrobble dispatcher                    | `internal/plugin/scrobbler.go`                                          | None         | `TODO`                      | -           |
+| `TSK-303` | **WS-PLG** | **Discord Rich Presence Integration**: Discord IPC socket bridge for track and time display       | `internal/plugin/discord.go`, `internal/plugin/discord_test.go`         | None         | `DONE`                      | Agent-RPC   |
+| `TSK-304` | **WS-PLG** | **Last.fm / ListenBrainz Scrobbler**: 50% elapsed playback scrobble dispatcher                    | `internal/plugin/scrobbler.go`, `internal/plugin/scrobbler_test.go`     | None         | `IN_PROGRESS [Agent-Scrob]` | Agent-Scrob |
 
 ---
 
@@ -131,7 +131,7 @@ Each workstream is isolated to its own subdirectory:
 When an agent completes a task:
 
 1. Ensure all tests in that task pass: `go test -v ./<package>/...`.
-2. Commit changes with a message mentioning the Task ID: `git commit -m "[TSK-107] Implement SQLite storage engine for library, playlists, and history"`.
+2. Commit changes with a message mentioning the Task ID: `git commit -m "[TSK-303] Implement Discord Rich Presence IPC bridge"`.
 3. Update this file (`docs/PROGRESS.md`):
    - Move the task to `DONE`.
    - Unblock any dependent tasks (change `BLOCKED` to `TODO`).
