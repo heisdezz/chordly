@@ -3,10 +3,13 @@ module chordly
 go 1.27.3
 
 require (
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gogpu/gg v0.52.3
 	github.com/gogpu/gogpu v0.53.0
 	github.com/gogpu/ui v0.1.54
 	github.com/google/uuid v1.6.0
+	github.com/tetratelabs/wazero v1.12.0
+	github.com/tphakala/go-opus v1.3.0
 	golang.org/x/image v0.45.0
 	modernc.org/sqlite v1.61.1
 )
@@ -23,6 +26,7 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/tphakala/simd v1.14.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	modernc.org/libc v1.79.0 // indirect
