@@ -111,7 +111,7 @@ Each workstream is isolated to its own subdirectory:
 | `TSK-202` | **WS-THM** | **Material You Tone Derivation & LERP Engine**: Smooth 250ms color transition ticker                          | `internal/theme/dynamic.go`, `internal/theme/dynamic_test.go` | `TSK-201`    | `TODO`                          | -               |
 | `TSK-203` | **WS-THM** | **Custom Theme Presets & Color Picker**: AMOLED, Material Light, Emerald, and Hex picker                      | `internal/theme/presets.go`                                   | None         | `TODO`                          | -               |
 | `TSK-204` | **WS-UI**  | **Karaoke Synced Lyrics Overlay View**: Auto-scrolling lyrics with active line highlighting and seek-on-click | `appui/lyrics_view.go`                                        | `TSK-106`    | `IN_PROGRESS [Agent-UI-Lyrics]` | Agent-UI-Lyrics |
-| `TSK-205` | **WS-UI**  | **Search Results Page with Filter Pills**: Categorized results (`Songs`, `Albums`, `Artists`, `Playlists`)    | `appui/search_view.go`                                        | None         | `IN_PROGRESS [Agent-UI]`        | Agent-UI        |
+| `TSK-205` | **WS-UI**  | **Search Results Page with Filter Pills**: Categorized results (`Songs`, `Albums`, `Artists`, `Playlists`)    | `appui/search_view.go`                                        | None         | `DONE`                          | Agent-UI        |
 
 ---
 
