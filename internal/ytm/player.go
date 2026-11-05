@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -39,15 +40,83 @@ type PlayerService struct {
 	// ytDlpPath is an optional fallback extractor. It is only set for the
 	// production service; injected test clients leave it empty.
 	ytDlpPath string
+
+	// validateURL probes the CDN before returning a URL. Tests leave it nil.
+	validateURL func(context.Context, string) error
+
+	// refreshVisitor mints anonymous visitor data before resolving. Disabled
+	// for injected test clients.
+	refreshVisitor bool
 }
 
 var DefaultPlayerService = NewPlayerService()
 
+// playableClients mirrors yt-dlp's spoofed clients. YouTube gates different
+// videos per client, so resolver tries them in order until one returns a
+// playable, byte-verified stream.
+var playableClients = []playerClientConfig{
+	androidMusicConfig,
+	{
+		Name:        "TVHTML5",
+		Version:     "5.20260707",
+		DeviceMake:  "Samsung",
+		DeviceModel: "UKS9800",
+		OSName:      "Tizen",
+		OSVersion:   "2.4.0",
+		UserAgent:   "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1",
+		Host:        "www",
+	},
+	{
+		Name:        "VISIONOS",
+		Version:     "1.02",
+		DeviceMake:  "Apple",
+		DeviceModel: "RealityDevice17,1",
+		OSName:      "visionOS",
+		OSVersion:   "26.5.23O471",
+		UserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+		Host:        "www",
+	},
+	{
+		Name:        "ANDROID_VR",
+		Version:     "1.65.10",
+		DeviceMake:  "Oculus",
+		DeviceModel: "Quest 3",
+		OSName:      "Android",
+		OSVersion:   "12L",
+		AndroidSDK:  32,
+		UserAgent:   "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+		Host:        "www",
+	},
+	{
+		Name:        "IOS",
+		Version:     "21.26.4",
+		DeviceMake:  "Apple",
+		DeviceModel: "iPhone16,2",
+		OSName:      "iPhone",
+		OSVersion:   "18.3.2.22D82",
+		UserAgent:   "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+		Host:        "www",
+	},
+	{
+		Name:      "MWEB",
+		Version:   "2.20260708.05.00",
+		UserAgent: "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)",
+		Host:      "www",
+	},
+	{
+		Name:    "WEB_REMIX",
+		Version: "1.20260707.12.00",
+		Host:    "music",
+	},
+}
+
 func NewPlayerService() *PlayerService {
 	return &PlayerService{
-		client:    NewClient(),
-		cache:     make(map[string]*StreamInfo),
-		ytDlpPath: findYTDLP(),
+		client:         NewClient(),
+		cache:          make(map[string]*StreamInfo),
+		ytDlpPath:      findYTDLP(),
+		validateURL:    validateStreamURL,
+		refreshVisitor: true,
 	}
 }
 
@@ -134,46 +203,111 @@ type playerFormat struct {
 }
 
 // resolveStream queries the player endpoint and returns the chosen URL plus
-// its mime type.
+// its mime type. Several spoofed clients are tried because YouTube gates
+// different videos per client; the result is probed for actual bytes before
+// being handed to the audio engine.
+//
+// When a session is attached it is tried first, then the same client rotation
+// is retried anonymously. Imported cookies are sometimes rejected outright
+// (LOGIN_REQUIRED or 400 INVALID_ARGUMENT) while the anonymous clients still
+// serve a playable stream, so a signed-in user must not be worse off than a
+// guest.
 func (p *PlayerService) resolveStream(ctx context.Context, videoID string) (string, string, error) {
 	client := p.client
 	if client == nil {
 		client = NewClient()
 	}
 
-	payload := RequestPayload{VideoID: videoID}
-
-	// The player endpoint must be queried with the ANDROID_MUSIC client
-	// context (WEB_REMIX is unsuitable for stream resolution: fewer direct
-	// URLs, more ciphering). Client.Do always stamps WEB_REMIX into the
-	// payload, so this call bypasses Do's context injection and reuses the
-	// client's transport instead.
-	var resp playerResponse
-	if err := client.doPlayer(ctx, payload, &resp); err != nil {
-		return "", "", err
+	payload := RequestPayload{
+		VideoID:      videoID,
+		ContentCheck: true,
+		RacyCheck:    true,
 	}
 
-	if status := resp.PlayabilityStatus.Status; status != "" && status != "OK" {
-		reason := resp.PlayabilityStatus.Reason
-		if reason == "" {
-			reason = "unknown"
+	authenticated := client.HasAuth()
+	modes := []bool{false}
+	if authenticated {
+		modes = []bool{true, false}
+	}
+
+	var lastErr error
+	for _, useAuth := range modes {
+		// A fresh anonymous visitor often clears bot challenges. Minting one is
+		// cheap insurance for the guest pass; authenticated requests keep using
+		// the session's own visitor data, so the refresh does not leak into them.
+		if !useAuth && p.refreshVisitor {
+			_ = client.RefreshVisitor(ctx)
 		}
-		return "", "", NewPlayabilityError(status, reason)
+
+		streamURL, mimeType, err := p.tryClients(ctx, client, payload, useAuth)
+		if err == nil {
+			return streamURL, mimeType, nil
+		}
+		lastErr = err
+		if useAuth {
+			log.Printf("[YTM] authenticated clients failed for %s, retrying anonymously: %v", videoID, err)
+		}
 	}
 
-	format := SelectAudioFormat(resp.StreamingData.AdaptiveFormats)
-	if format == nil {
-		// Some videos only expose progressive `formats` (older uploads).
-		format = SelectAudioFormat(resp.StreamingData.Formats)
+	if lastErr == nil {
+		lastErr = errors.New("no player client produced a stream")
 	}
-	if format == nil {
-		return "", "", errors.New("no playable audio format in player response")
-	}
-	if format.URL == "" {
-		return "", "", fmt.Errorf("audio format itag %d has no direct url (signature deciphering required)", format.Itag)
+	return "", "", lastErr
+}
+
+// tryClients walks the spoofed client rotation once, optionally attaching the
+// imported session, and returns the first byte-verified audio stream.
+func (p *PlayerService) tryClients(ctx context.Context, client *Client, payload RequestPayload, useAuth bool) (string, string, error) {
+	var lastErr error
+	for _, candidate := range playableClients {
+		var resp playerResponse
+		err := client.doPlayerWithClient(ctx, candidate, payload, &resp, useAuth)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if status := resp.PlayabilityStatus.Status; status != "" && status != "OK" {
+			reason := resp.PlayabilityStatus.Reason
+			if reason == "" {
+				reason = "unknown"
+			}
+			lastErr = NewPlayabilityError(status, reason)
+			continue
+		}
+
+		format := SelectAudioFormat(resp.StreamingData.AdaptiveFormats)
+		if format == nil {
+			format = SelectAudioFormat(resp.StreamingData.Formats)
+		}
+		if format == nil {
+			lastErr = errors.New("no playable audio format in player response")
+			continue
+		}
+		if format.URL == "" {
+			lastErr = fmt.Errorf("audio format itag %d has no direct url (signature deciphering required)", format.Itag)
+			continue
+		}
+
+		if p.validateURL != nil {
+			if err := p.validateURL(ctx, format.URL); err != nil {
+				lastErr = fmt.Errorf("stream url validation failed for itag %d: %w", format.Itag, err)
+				continue
+			}
+		}
+
+		mode := "guest"
+		if useAuth {
+			mode = "session"
+		}
+		log.Printf("[YTM] stream resolved via %s (itag %d, %s)", candidate.Name, format.Itag, mode)
+		return format.URL, format.MimeType, nil
 	}
 
-	return format.URL, format.MimeType, nil
+	if lastErr == nil {
+		lastErr = errors.New("no player client produced a stream")
+	}
+	return "", "", lastErr
 }
 
 // SelectAudioFormat picks the best audio-only format from a list of adaptive
@@ -232,6 +366,36 @@ func (e *PlayabilityError) Error() string {
 // NewPlayabilityError wraps a non-OK status into a *PlayabilityError.
 func NewPlayabilityError(status, reason string) error {
 	return &PlayabilityError{Status: status, Reason: reason}
+}
+
+var streamProbeClient = &http.Client{Timeout: 10 * time.Second}
+
+// validateStreamURL confirms the CDN actually serves bytes before the player
+// is handed the URL. Some clients return a syntactically valid but dead URL.
+func validateStreamURL(ctx context.Context, streamURL string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Range", "bytes=0-4095")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+
+	resp, err := streamProbeClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("CDN returned HTTP %d", resp.StatusCode)
+	}
+
+	var probe [512]byte
+	n, err := resp.Body.Read(probe[:])
+	if n == 0 && err != nil {
+		return fmt.Errorf("CDN returned no bytes: %w", err)
+	}
+	return nil
 }
 
 // findYTDLP locates an optional yt-dlp binary. CHORDLY_YTDLP overrides PATH.
@@ -299,6 +463,11 @@ func (p *PlayerService) resolveWithYTDLP(ctx context.Context, videoID string) (s
 	mimeType := "audio/webm"
 	if strings.Contains(streamURL, "mime=audio%2Fmp4") || strings.Contains(streamURL, "mime=audio/mp4") {
 		mimeType = "audio/mp4"
+	}
+	if p.validateURL != nil {
+		if err := p.validateURL(ctx, streamURL); err != nil {
+			return "", "", fmt.Errorf("yt-dlp URL validation failed: %w", err)
+		}
 	}
 	return streamURL, mimeType, nil
 }

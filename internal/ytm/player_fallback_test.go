@@ -21,7 +21,7 @@ func TestAuthorizationHeaderIncludesAllSIDHashes(t *testing.T) {
 		},
 	}
 
-	got := authorizationHeader(bundle, 1700000000)
+	got := authorizationHeader(bundle, 1700000000, ytmOrigin)
 	for _, scheme := range []string{"SAPISIDHASH", "SAPISID1PHASH", "SAPISID3PHASH"} {
 		if !strings.Contains(got, scheme+" 1700000000_") {
 			t.Errorf("authorization header missing %s: %q", scheme, got)

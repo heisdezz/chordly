@@ -5,9 +5,11 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -67,24 +69,33 @@ func (c *Client) HasAuth() bool {
 }
 
 func (c *Client) requestState() (visitor string, auth *TokenBundle) {
+	return c.requestStateFor(true)
+}
+
+// requestStateFor returns the visitor id and attached session for a request.
+// When useAuth is false the session's visitor data is ignored as well, so a
+// guest retry looks like a genuinely anonymous client rather than a logged-in
+// visitor without credentials.
+func (c *Client) requestStateFor(useAuth bool) (visitor string, auth *TokenBundle) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	visitor = c.visitorID
-	if c.auth != nil {
-		copy := *c.auth
-		auth = &copy
-		if auth.VisitorData != "" {
-			visitor = auth.VisitorData
-		}
+	if c.auth == nil {
+		return visitor, nil
+	}
+	copy := *c.auth
+	auth = &copy
+	if useAuth && auth.VisitorData != "" {
+		visitor = auth.VisitorData
 	}
 	return visitor, auth
 }
 
-func (c *Client) applyAuth(req *http.Request, auth *TokenBundle, visitor string) {
+func (c *Client) applyAuth(req *http.Request, auth *TokenBundle, visitor, origin string, useAuth bool) {
 	if visitor != "" {
 		req.Header.Set("X-Goog-Visitor-Id", visitor)
 	}
-	if auth == nil {
+	if !useAuth || auth == nil {
 		return
 	}
 	if auth.Cookie != "" {
@@ -97,27 +108,27 @@ func (c *Client) applyAuth(req *http.Request, auth *TokenBundle, visitor string)
 		if c.now != nil {
 			now = c.now
 		}
-		authorization = authorizationHeader(auth, now().Unix())
+		authorization = authorizationHeader(auth, now().Unix(), origin)
 	}
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}
 
 	req.Header.Set("X-Goog-AuthUser", "0")
-	req.Header.Set("Origin", ytmOrigin)
-	req.Header.Set("X-Origin", ytmOrigin)
+	req.Header.Set("Origin", origin)
+	req.Header.Set("X-Origin", origin)
 	req.Header.Set("X-Youtube-Bootstrap-Logged-In", "true")
 }
 
 // authorizationHeader mirrors yt-dlp: send every SID hash the account exposes.
 // Some accounts/clients reject a lone SAPISIDHASH when 1P/3P cookies exist.
-func authorizationHeader(bundle *TokenBundle, timestamp int64) string {
+func authorizationHeader(bundle *TokenBundle, timestamp int64, origin string) string {
 	parts := make([]string, 0, 3)
 	add := func(scheme, sid string) {
 		if sid == "" {
 			return
 		}
-		parts = append(parts, sidAuthorization(scheme, sid, timestamp))
+		parts = append(parts, sidAuthorization(scheme, sid, timestamp, origin))
 	}
 	add("SAPISIDHASH", bundle.SAPISID)
 	add("SAPISID1PHASH", bundle.Cookies["__Secure-1PAPISID"])
@@ -126,8 +137,8 @@ func authorizationHeader(bundle *TokenBundle, timestamp int64) string {
 }
 
 // sidAuthorization builds one SID hash scheme value.
-func sidAuthorization(scheme, sapisid string, timestamp int64) string {
-	payload := fmt.Sprintf("%d %s %s", timestamp, sapisid, ytmOrigin)
+func sidAuthorization(scheme, sapisid string, timestamp int64, origin string) string {
+	payload := fmt.Sprintf("%d %s %s", timestamp, sapisid, origin)
 	sum := sha1.Sum([]byte(payload))
 	return fmt.Sprintf("%s %d_%x", scheme, timestamp, sum)
 }
@@ -135,7 +146,7 @@ func sidAuthorization(scheme, sapisid string, timestamp int64) string {
 // sapisidHash builds the standard Authorization value used by tests and the
 // non-1P/3P fallback.
 func sapisidHash(sapisid string, timestamp int64) string {
-	return sidAuthorization("SAPISIDHASH", sapisid, timestamp)
+	return sidAuthorization("SAPISIDHASH", sapisid, timestamp, ytmOrigin)
 }
 
 // RequestPayload represents the standard YouTube InnerTube request body.
@@ -148,6 +159,8 @@ type RequestPayload struct {
 	Continuation string         `json:"continuation,omitempty"`
 	Params       string         `json:"params,omitempty"`
 	IsAudioOnly  bool           `json:"isAudioOnly,omitempty"`
+	ContentCheck bool           `json:"contentCheckOk,omitempty"`
+	RacyCheck    bool           `json:"racyCheckOk,omitempty"`
 }
 
 type RequestContext struct {
@@ -160,6 +173,12 @@ type ContextClient struct {
 	HL            string `json:"hl"`
 	GL            string `json:"gl"`
 	VisitorData   string `json:"visitorData,omitempty"`
+
+	DeviceMake        string `json:"deviceMake,omitempty"`
+	DeviceModel       string `json:"deviceModel,omitempty"`
+	OSName            string `json:"osName,omitempty"`
+	OSVersion         string `json:"osVersion,omitempty"`
+	AndroidSDKVersion int    `json:"androidSdkVersion,omitempty"`
 }
 
 // Do executes a POST request against a YouTube Music InnerTube endpoint.
@@ -190,7 +209,7 @@ func (c *Client) Do(ctx context.Context, endpoint string, payload RequestPayload
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 	req.Header.Set("Referer", "https://music.youtube.com/")
-	c.applyAuth(req, auth, visitor)
+	c.applyAuth(req, auth, visitor, ytmOrigin, true)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -207,19 +226,51 @@ func (c *Client) Do(ctx context.Context, endpoint string, payload RequestPayload
 	return jsonResponse(resp, out)
 }
 
-// doPlayer resolves a `/player` request. It stamps the ANDROID_MUSIC client
-// context (WEB_REMIX is unsuitable for stream resolution: fewer direct URLs,
-// more ciphering) and shares visitor-id bookkeeping with Do.
+// playerClientConfig describes one spoofed InnerTube player client. Multiple
+// clients are tried because YouTube gates different videos per client.
+type playerClientConfig struct {
+	Name        string
+	Version     string
+	UserAgent   string
+	DeviceMake  string
+	DeviceModel string
+	OSName      string
+	OSVersion   string
+	AndroidSDK  int
+	Host        string // "music" (default) or "www"
+}
+
+var androidMusicConfig = playerClientConfig{
+	Name:       androidMusicClient,
+	Version:    androidMusicVer,
+	OSName:     "Android",
+	OSVersion:  "14",
+	AndroidSDK: 34,
+	Host:       "music",
+}
+
+// doPlayer resolves a `/player` request with the default Android Music client.
 func (c *Client) doPlayer(ctx context.Context, payload RequestPayload, out interface{}) error {
-	visitor, auth := c.requestState()
+	return c.doPlayerWithClient(ctx, androidMusicConfig, payload, out, true)
+}
+
+// doPlayerWithClient resolves a `/player` request using a specific spoofed
+// client context. useAuth controls whether the imported session is attached.
+func (c *Client) doPlayerWithClient(ctx context.Context, cfg playerClientConfig, payload RequestPayload, out interface{}, useAuth bool) error {
+	visitor, auth := c.requestStateFor(useAuth)
 
 	payload.Context = RequestContext{
 		Client: ContextClient{
-			ClientName:    androidMusicClient,
-			ClientVersion: androidMusicVer,
-			HL:            "en",
-			GL:            "US",
-			VisitorData:   visitor,
+			ClientName:        cfg.Name,
+			ClientVersion:     cfg.Version,
+			HL:                "en",
+			GL:                "US",
+			VisitorData:       visitor,
+			DeviceMake:        cfg.DeviceMake,
+			DeviceModel:       cfg.DeviceModel,
+			OSName:            cfg.OSName,
+			OSVersion:         cfg.OSVersion,
+			AndroidSDKVersion: cfg.AndroidSDK,
 		},
 	}
 
@@ -228,16 +279,24 @@ func (c *Client) doPlayer(ctx context.Context, payload RequestPayload, out inter
 		return fmt.Errorf("marshal payload error: %w", err)
 	}
 
-	reqURL := fmt.Sprintf("%s/player", baseEndpoint)
+	host := ytmOrigin
+	if cfg.Host == "www" {
+		host = "https://www.youtube.com"
+	}
+	reqURL := host + "/youtubei/v1/player"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return fmt.Errorf("create request error: %w", err)
 	}
 
+	ua := cfg.UserAgent
+	if ua == "" {
+		ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", "https://music.youtube.com/")
-	c.applyAuth(req, auth, visitor)
+	req.Header.Set("User-Agent", ua)
+	req.Header.Set("Referer", host+"/")
+	c.applyAuth(req, auth, visitor, host, useAuth)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -252,6 +311,48 @@ func (c *Client) doPlayer(ctx context.Context, payload RequestPayload, out inter
 
 	c.updateVisitor(resp.Header)
 	return jsonResponse(resp, out)
+}
+
+var visitorDataPattern = regexp.MustCompile(`Cg[A-Za-z0-9_-]{40,}`)
+
+// RefreshVisitor mints an anonymous visitor id from YouTube's service-worker
+// data. A fresh visitor often clears "confirm you're not a bot" responses.
+func (c *Client) RefreshVisitor(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.youtube.com/sw.js_data", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("visitor mint failed with status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	matches := visitorDataPattern.FindAll(data, -1)
+	if len(matches) == 0 {
+		return errors.New("visitor mint: no visitorData found")
+	}
+
+	best := matches[0]
+	for _, match := range matches[1:] {
+		if len(match) > len(best) {
+			best = match
+		}
+	}
+
+	c.mu.Lock()
+	c.visitorID = string(best)
+	c.mu.Unlock()
+	return nil
 }
 
 // updateVisitor persists the X-Goog-Visitor-Id header for subsequent requests.
