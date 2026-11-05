@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -90,16 +91,13 @@ func (c *Client) applyAuth(req *http.Request, auth *TokenBundle, visitor string)
 		req.Header.Set("Cookie", auth.Cookie)
 	}
 
-	authorization := ""
+	authorization := auth.Authorization
 	if auth.SAPISID != "" {
 		now := time.Now
 		if c.now != nil {
 			now = c.now
 		}
-		authorization = sapisidHash(auth.SAPISID, now().Unix())
-	} else {
-		// Fall back to a supplied header when the bundle has no SAPISID.
-		authorization = auth.Authorization
+		authorization = authorizationHeader(auth, now().Unix())
 	}
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
@@ -108,14 +106,36 @@ func (c *Client) applyAuth(req *http.Request, auth *TokenBundle, visitor string)
 	req.Header.Set("X-Goog-AuthUser", "0")
 	req.Header.Set("Origin", ytmOrigin)
 	req.Header.Set("X-Origin", ytmOrigin)
+	req.Header.Set("X-Youtube-Bootstrap-Logged-In", "true")
 }
 
-// sapisidHash builds the Authorization header used by YouTube Music web
-// sessions: SAPISIDHASH <ts>_<SHA1(ts + " " + SAPISID + " " + origin)>.
-func sapisidHash(sapisid string, timestamp int64) string {
+// authorizationHeader mirrors yt-dlp: send every SID hash the account exposes.
+// Some accounts/clients reject a lone SAPISIDHASH when 1P/3P cookies exist.
+func authorizationHeader(bundle *TokenBundle, timestamp int64) string {
+	parts := make([]string, 0, 3)
+	add := func(scheme, sid string) {
+		if sid == "" {
+			return
+		}
+		parts = append(parts, sidAuthorization(scheme, sid, timestamp))
+	}
+	add("SAPISIDHASH", bundle.SAPISID)
+	add("SAPISID1PHASH", bundle.Cookies["__Secure-1PAPISID"])
+	add("SAPISID3PHASH", bundle.Cookies["__Secure-3PAPISID"])
+	return strings.Join(parts, " ")
+}
+
+// sidAuthorization builds one SID hash scheme value.
+func sidAuthorization(scheme, sapisid string, timestamp int64) string {
 	payload := fmt.Sprintf("%d %s %s", timestamp, sapisid, ytmOrigin)
 	sum := sha1.Sum([]byte(payload))
-	return fmt.Sprintf("SAPISIDHASH %d_%x", timestamp, sum)
+	return fmt.Sprintf("%s %d_%x", scheme, timestamp, sum)
+}
+
+// sapisidHash builds the standard Authorization value used by tests and the
+// non-1P/3P fallback.
+func sapisidHash(sapisid string, timestamp int64) string {
+	return sidAuthorization("SAPISIDHASH", sapisid, timestamp)
 }
 
 // RequestPayload represents the standard YouTube InnerTube request body.

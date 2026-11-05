@@ -1,9 +1,13 @@
 package ytm
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -31,14 +35,19 @@ type PlayerService struct {
 	client *Client
 	mu     sync.RWMutex
 	cache  map[string]*StreamInfo
+
+	// ytDlpPath is an optional fallback extractor. It is only set for the
+	// production service; injected test clients leave it empty.
+	ytDlpPath string
 }
 
 var DefaultPlayerService = NewPlayerService()
 
 func NewPlayerService() *PlayerService {
 	return &PlayerService{
-		client: NewClient(),
-		cache:  make(map[string]*StreamInfo),
+		client:    NewClient(),
+		cache:     make(map[string]*StreamInfo),
+		ytDlpPath: findYTDLP(),
 	}
 }
 
@@ -77,7 +86,18 @@ func (p *PlayerService) ResolveStreamURL(ctx context.Context, videoID string) (s
 	// 2. Resolve via InnerTube player endpoint
 	streamURL, mimeType, err := p.resolveStream(ctx, videoID)
 	if err != nil {
-		return "", fmt.Errorf("resolve audio stream for %s failed: %w", videoID, err)
+		if p.ytDlpPath != "" && shouldFallbackToYTDLP(err) {
+			fallbackURL, fallbackMime, fallbackErr := p.resolveWithYTDLP(ctx, videoID)
+			if fallbackErr == nil {
+				log.Printf("[YTM] InnerTube failed, using yt-dlp stream fallback for %s", videoID)
+				streamURL, mimeType, err = fallbackURL, fallbackMime, nil
+			} else {
+				log.Printf("[YTM] yt-dlp fallback failed for %s: %v", videoID, fallbackErr)
+			}
+		}
+		if err != nil {
+			return "", fmt.Errorf("resolve audio stream for %s failed: %w", videoID, err)
+		}
 	}
 
 	// 3. Store in cache (see header comment for the 4h safety expiry)
@@ -212,4 +232,73 @@ func (e *PlayabilityError) Error() string {
 // NewPlayabilityError wraps a non-OK status into a *PlayabilityError.
 func NewPlayabilityError(status, reason string) error {
 	return &PlayabilityError{Status: status, Reason: reason}
+}
+
+// findYTDLP locates an optional yt-dlp binary. CHORDLY_YTDLP overrides PATH.
+func findYTDLP() string {
+	if configured := os.Getenv("CHORDLY_YTDLP"); configured != "" {
+		if info, err := os.Stat(configured); err == nil && !info.IsDir() {
+			return configured
+		}
+	}
+	if path, err := exec.LookPath("yt-dlp"); err == nil {
+		return path
+	}
+	return ""
+}
+
+// shouldFallbackToYTDLP reports whether an InnerTube failure is likely to be
+// solved by the external extractor (sign-in/HTTP gating rather than a bad ID).
+func shouldFallbackToYTDLP(err error) bool {
+	if err == nil {
+		return false
+	}
+	var playability *PlayabilityError
+	if errors.As(err, &playability) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "status 400") ||
+		strings.Contains(msg, "status 401") ||
+		strings.Contains(msg, "status 403")
+}
+
+// resolveWithYTDLP asks yt-dlp for a direct audio URL. No cookie file is
+// passed: yt-dlp uses its own client/PO-token handling, and fallback only runs
+// after InnerTube has failed.
+func (p *PlayerService) resolveWithYTDLP(ctx context.Context, videoID string) (string, string, error) {
+	cmdCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, p.ytDlpPath,
+		"--no-warnings",
+		"--no-playlist",
+		"--no-progress",
+		"-f", "bestaudio[acodec=opus]/bestaudio",
+		"-g",
+		"--", "https://music.youtube.com/watch?v="+videoID,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" {
+			return "", "", fmt.Errorf("yt-dlp: %w", err)
+		}
+		return "", "", fmt.Errorf("yt-dlp: %w: %s", err, detail)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return "", "", errors.New("yt-dlp returned no stream URL")
+	}
+
+	streamURL := strings.TrimSpace(lines[0])
+	mimeType := "audio/webm"
+	if strings.Contains(streamURL, "mime=audio%2Fmp4") || strings.Contains(streamURL, "mime=audio/mp4") {
+		mimeType = "audio/mp4"
+	}
+	return streamURL, mimeType, nil
 }
