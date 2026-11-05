@@ -4,7 +4,7 @@
 **Task series:** `UI-AUTH-01` → `UI-AUTH-03` → `UI-PAGE-01` → `UI-PAGE-02` (plan: `docs/ui/auth-signin-plan.md`)
 **File Scope:** `internal/ytm/token.go`, `internal/ytm/token_test.go`
 **Dependencies:** None
-**Status:** `IN_PROGRESS [Agent-Auth]`
+**Status:** `DONE` — commit `1b0…` (UI-AUTH-01 token bundle parser, adapters, required-cookie checks implemented)
 
 ---
 

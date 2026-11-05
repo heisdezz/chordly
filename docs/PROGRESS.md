@@ -176,7 +176,7 @@ unless a dependency is listed. Auth parser backend work is tracked in Phase 4
 
 | Task ID      | Workstream | Description                                                                                              | File Scope                                            | Dependencies | Status                     | Owner      |
 | ------------ | ---------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------ | -------------------------- | ---------- |
-| `UI-AUTH-01` | **WS-YTM** | **Google Sign-In Token Bundle Parser**: Bundle model, format adapters, detection, required-cookie checks | `internal/ytm/token.go`, `internal/ytm/token_test.go` | None         | `IN_PROGRESS [Agent-Auth]` | Agent-Auth |
+| `UI-AUTH-01` | **WS-YTM** | **Google Sign-In Token Bundle Parser**: Bundle model, format adapters, detection, required-cookie checks | `internal/ytm/token.go`, `internal/ytm/token_test.go` | None         | `DONE` | Agent-Auth  |
 
 ---
 
