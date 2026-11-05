@@ -777,10 +777,10 @@ func (p *musixmatchProvider) FetchLyrics(ctx context.Context, trackName, artistN
 	}
 
 	var data struct {
-		Message  string `json:"message"`
-		Track    struct {
-			LyricsID int    `json:"lyrics_id"`
-			TrackName string `json:"track_name"`
+		Message string `json:"message"`
+		Track   struct {
+			LyricsID   int    `json:"lyrics_id"`
+			TrackName  string `json:"track_name"`
 			ArtistName string `json:"artist_name"`
 		} `json:"track"`
 	}
