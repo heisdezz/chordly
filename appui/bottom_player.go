@@ -44,14 +44,7 @@ func buildMiniPlayer(r *router.Router) widget.Widget {
 	// Left: Album thumbnail & Metadata
 	track := state.CurrentTrack.Get()
 
-	thumb := primitives.HBox(
-		NewVectorIcon(IconWaveform, theme.ColorAccent, 18),
-	).
-		PaddingXY(14, 12).
-		Background(widget.Hex(0x182C29)).
-		Rounded(10).
-		BorderStyle(1, theme.ColorBorder)
-
+	thumb := NewThumbnailWidget(track.Thumbnail, 46, 10, track.Title)
 	miniPlayerArtSource = thumb
 
 	meta := primitives.VBox(

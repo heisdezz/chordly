@@ -1,12 +1,17 @@
 package appui
 
 import (
+	"context"
+	"log"
+	"time"
+
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/widget"
 
 	"chordly/internal/model"
 	"chordly/internal/state"
 	"chordly/internal/theme"
+	"chordly/internal/ytm"
 )
 
 // NewNewReleasesSection renders the "New releases" row. It rebuilds when the
@@ -60,16 +65,34 @@ func newReleaseTrackRow(track model.Track) widget.Widget {
 	// Duration
 	durationText := primitives.Text(track.DurationStr).FontSize(12).Color(theme.ColorTextMuted)
 
-	// Play button
+	// Play button: starts playback directly without unintended album navigation
 	playBtn := NewVectorIconButton(IconPlay, 32, 14, func() {
-		state.CurrentTrack.Set(track)
-		state.PlaybackStatus.Set(model.StatePlaying)
-		state.Playhead.Set(0)
-		albumID := track.Album
-		if albumID == "" {
-			albumID = track.ID
+		releases := state.NewReleases.Get()
+		if len(releases) > 0 {
+			state.Queue.Set(releases)
+			for i, r := range releases {
+				if r.ID == track.ID {
+					state.QueueIndex.Set(i)
+					break
+				}
+			}
 		}
-		Navigate("/album/" + albumID)
+		state.PlaySpecificTrack(track)
+
+		// Pre-resolve stream in background if URL is missing
+		if track.StreamURL == "" {
+			go func(t model.Track) {
+				resCtx, resCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer resCancel()
+				if err := ytm.DefaultService.PrepareTrackStream(resCtx, &t); err == nil {
+					if state.CurrentTrack.Get().ID == t.ID {
+						state.CurrentTrack.Set(t)
+					}
+				} else {
+					log.Printf("[UI] Stream resolve failed for %q: %v", t.Title, err)
+				}
+			}(track)
+		}
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.BorderWidth = 0

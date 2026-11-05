@@ -435,13 +435,16 @@ func (a *PlayerArtwork) Draw(ctx widget.Context, canvas widget.Canvas) {
 	}
 
 	const radius = 24
-	canvas.DrawRoundRect(b, theme.ColorSurface, radius)
-
-	canvas.DrawCircle(center, side*0.36, theme.ColorAccent.WithAlpha(0.10))
-	canvas.DrawCircle(center, side*0.24, theme.ColorAccent.WithAlpha(0.16))
-
-	DrawVectorIcon(canvas, IconWaveform, b, theme.ColorAccent, side*0.28)
-
+	track := state.CurrentTrack.Get()
+	// Try to use thumbnail widget if available
+	tw := NewThumbnailWidget(track.Thumbnail, side, radius, track.Title)
+	// Layout it to match bounds
+	tw.Layout(ctx, geometry.Constraints{MaxWidth: side, MaxHeight: side})
+	if setter, ok := interface{}(tw).(interface{ SetBounds(geometry.Rect) }); ok {
+		setter.SetBounds(b)
+	}
+	// Draw the thumbnail widget
+	tw.Draw(ctx, canvas)
 	canvas.StrokeRoundRect(b, theme.ColorBorder, radius, 1)
 }
 
