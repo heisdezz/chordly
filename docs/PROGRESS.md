@@ -105,13 +105,13 @@ Each workstream is isolated to its own subdirectory:
 
 ### Phase 2: Theming & Visual Extensibility (Parallelizable)
 
-| Task ID   | Workstream | Description                                                                                                   | File Scope                                                    | Dependencies | Status                    | Owner     |
-| --------- | ---------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------ | ------------------------- | --------- |
-| `TSK-201` | **WS-THM** | **Album Art Color Quantizer**: K-Means / MMCQ extraction from 64x64 album art thumbnail                       | `internal/theme/extract.go`, `internal/theme/extract_test.go` | None         | `IN_PROGRESS [Agent-THM]` | Agent-THM |
-| `TSK-202` | **WS-THM** | **Material You Tone Derivation & LERP Engine**: Smooth 250ms color transition ticker                          | `internal/theme/dynamic.go`, `internal/theme/dynamic_test.go` | `TSK-201`    | `TODO`                    | -         |
-| `TSK-203` | **WS-THM** | **Custom Theme Presets & Color Picker**: AMOLED, Material Light, Emerald, and Hex picker                      | `internal/theme/presets.go`                                   | None         | `TODO`                    | -         |
-| `TSK-204` | **WS-UI**  | **Karaoke Synced Lyrics Overlay View**: Auto-scrolling lyrics with active line highlighting and seek-on-click | `appui/lyrics_view.go`                                        | `TSK-106`    | `TODO`                    | -         |
-| `TSK-205` | **WS-UI**  | **Search Results Page with Filter Pills**: Categorized results (`Songs`, `Albums`, `Artists`, `Playlists`)    | `appui/search_view.go`                                        | None         | `TODO`                    | -         |
+| Task ID   | Workstream | Description                                                                                                   | File Scope                                                    | Dependencies | Status                          | Owner           |
+| --------- | ---------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------ | ------------------------------- | --------------- |
+| `TSK-201` | **WS-THM** | **Album Art Color Quantizer**: K-Means / MMCQ extraction from 64x64 album art thumbnail                       | `internal/theme/extract.go`, `internal/theme/extract_test.go` | None         | `DONE`                          | Agent-THM       |
+| `TSK-202` | **WS-THM** | **Material You Tone Derivation & LERP Engine**: Smooth 250ms color transition ticker                          | `internal/theme/dynamic.go`, `internal/theme/dynamic_test.go` | `TSK-201`    | `TODO`                          | -               |
+| `TSK-203` | **WS-THM** | **Custom Theme Presets & Color Picker**: AMOLED, Material Light, Emerald, and Hex picker                      | `internal/theme/presets.go`                                   | None         | `TODO`                          | -               |
+| `TSK-204` | **WS-UI**  | **Karaoke Synced Lyrics Overlay View**: Auto-scrolling lyrics with active line highlighting and seek-on-click | `appui/lyrics_view.go`                                        | `TSK-106`    | `IN_PROGRESS [Agent-UI-Lyrics]` | Agent-UI-Lyrics |
+| `TSK-205` | **WS-UI**  | **Search Results Page with Filter Pills**: Categorized results (`Songs`, `Albums`, `Artists`, `Playlists`)    | `appui/search_view.go`                                        | None         | `IN_PROGRESS [Agent-UI]`        | Agent-UI        |
 
 ---
 
@@ -131,7 +131,7 @@ Each workstream is isolated to its own subdirectory:
 When an agent completes a task:
 
 1. Ensure all tests in that task pass: `go test -v ./<package>/...`.
-2. Commit changes with a message mentioning the Task ID: `git commit -m "[TSK-106] Implement synchronized lyrics parser and LRCLIB ingestion"`.
+2. Commit changes with a message mentioning the Task ID: `git commit -m "[TSK-201] Implement album art K-Means color quantizer"`.
 3. Update this file (`docs/PROGRESS.md`):
    - Move the task to `DONE`.
    - Unblock any dependent tasks (change `BLOCKED` to `TODO`).
