@@ -150,7 +150,7 @@ unless a dependency is listed. Auth parser backend work is tracked in Phase 4
 
 | Task ID   | Workstream | Description                                                                                                     | File Scope                                                                                                   | Dependencies            | Status                 | Owner |
 | --------- | ---------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------- | ---------------------- | ----- |
-| `TSK-213` | WS-UI      | **Re-vendor GoGPU & Adopt Core Widgets**: textfield/clipboard, scrollview, listview, dialog, page scaffold      | `go.mod`, `vendor/`, `appui/textfield.go` (replace), `appui/page_scaffold.go`, `appui/topbar.go`             | vendor sync (B10)       | `TODO`                 | -     |
+| `TSK-213` | WS-UI      | **Re-vendor GoGPU & Adopt Core Widgets**: textfield/clipboard, scrollview, listview, dialog, page scaffold      | `go.mod`, `vendor/`, `appui/textfield.go` (replace), `appui/page_scaffold.go`, `appui/topbar.go`             | vendor sync (B10)       | `IN_PROGRESS [Agent-UI-Widgets]` | Agent-UI-Widgets |
 | `TSK-214` | WS-UI      | **Sign-In Page & InnerTune Import Flow**: `/login` UI, clipboard/token/file paste, account preview, return path | `appui/signin_view.go`, `appui/login_page.go`, `appui/settings_view.go` (account link), `main.go`            | `UI-AUTH-01`, `TSK-213` | `BLOCKED [UI-AUTH-01]` | -     |
 | `TSK-215` | WS-UI      | **Account Page**: account identity, session health, re-import, sign out                                         | `appui/account_view.go`, `appui/sidebar.go`                                                                  | `TSK-214`               | `TODO`                 | -     |
 | `TSK-216` | WS-UI/DB   | **Library Shell**: favorites/playlists/history (auth) + downloads (local), guest CTA                            | `appui/library_view.go`, `appui/library_tabs.go`, `internal/cache/db.go` (read-only)                         | `TSK-214`, `TSK-107`    | `TODO`                 | -     |
@@ -177,6 +177,14 @@ unless a dependency is listed. Auth parser backend work is tracked in Phase 4
 | Task ID      | Workstream | Description                                                                                              | File Scope                                            | Dependencies | Status                     | Owner      |
 | ------------ | ---------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------ | -------------------------- | ---------- |
 | `UI-AUTH-01` | **WS-YTM** | **Google Sign-In Token Bundle Parser**: Bundle model, format adapters, detection, required-cookie checks | `internal/ytm/token.go`, `internal/ytm/token_test.go` | None         | `DONE` | Agent-Auth  |
+
+---
+
+### Phase 5: UI Component Adoption & Motion (Planned)
+
+| Task ID   | Workstream | Description                                                                      | File Scope                                    | Dependencies | Status | Owner |
+| --------- | ---------- | -------------------------------------------------------------------------------- | ------------------------------------------- | ------------ | ------ | ----- |
+| `UI-INF-01` | **WS-UI**  | **Re-vendor GoGPU & adopt core components** (`core/textfield`, `core/scrollview`, `core/listview`) | `appui/*` adoption + GoGPU vendor updates | None         | `TODO` | -     |
 
 ---
 
