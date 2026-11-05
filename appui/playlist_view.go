@@ -119,20 +119,8 @@ func buildPlaylistDetailContent(c router.RouteContext, pl *ytm.PlaylistDetails, 
 		s.Foreground = palette.TextPrimary
 	})
 
-	// Artwork box (140x140)
-	iconType := IconQueue
-	if isMix {
-		iconType = IconWaveform
-	}
-	artBox := primitives.HBox(
-		NewVectorIcon(iconType, palette.Accent, 48),
-	).
-		Width(140).
-		Height(140).
-		Background(widget.Hex(0x16232B)).
-		Rounded(16).
-		BorderStyle(1, palette.Border).
-		CrossAlign(primitives.CrossAxisCenter)
+	// Artwork box (140x140 with real thumbnail)
+	artBox := NewThumbnailWidget(pl.Thumbnail, 140, 16, pl.Title)
 
 	// Badge & Title
 	badge := primitives.Text(badgeText).
@@ -204,7 +192,7 @@ func buildPlaylistDetailContent(c router.RouteContext, pl *ytm.PlaylistDetails, 
 	// Tracklist Header
 	tableHeader := primitives.HBox(
 		primitives.Text("#").FontSize(12).Bold().Color(palette.TextMuted),
-		primitives.Box().Width(18),
+		primitives.Box().Width(60),
 		primitives.Expanded(primitives.Text("TITLE").FontSize(12).Bold().Color(palette.TextMuted)),
 		primitives.Text("DURATION").FontSize(12).Bold().Color(palette.TextMuted),
 		primitives.Box().Width(80),

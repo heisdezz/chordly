@@ -48,14 +48,8 @@ func buildNewReleasesContent() widget.Widget {
 }
 
 func newReleaseTrackRow(track model.Track) widget.Widget {
-	// Thumbnail Box (46x46)
-	thumb := primitives.HBox(
-		NewVectorIcon(IconWaveform, theme.ColorAccent, 16),
-	).
-		PaddingXY(14, 12).
-		Background(widget.Hex(0x1B2830)).
-		Rounded(10).
-		BorderStyle(1, theme.ColorBorder)
+	// Thumbnail Box with real artwork
+	thumb := NewThumbnailWidget(track.Thumbnail, 46, 10, track.Title)
 
 	// Title & Artist
 	meta := primitives.VBox(
@@ -93,7 +87,11 @@ func newReleaseTrackRow(track model.Track) widget.Widget {
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.BorderWidth = 0
-		s.Foreground = theme.ColorTextMuted
+		if track.IsLiked {
+			s.Foreground = theme.ColorHeartActive
+		} else {
+			s.Foreground = theme.ColorTextMuted
+		}
 	})
 
 	moreBtn := NewVectorIconButton(IconMore, 32, 14, func() {

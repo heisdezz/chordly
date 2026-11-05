@@ -106,16 +106,8 @@ func buildAlbumDetailView(c router.RouteContext, album *ytm.AlbumDetails) widget
 		s.Foreground = palette.TextPrimary
 	})
 
-	// Album Artwork Box (140x140)
-	artBox := primitives.HBox(
-		NewVectorIcon(IconWaveform, palette.Accent, 48),
-	).
-		Width(140).
-		Height(140).
-		Background(widget.Hex(0x142028)).
-		Rounded(16).
-		BorderStyle(1, palette.Border).
-		CrossAlign(primitives.CrossAxisCenter)
+	// Album Artwork Box (140x140 with real CDN thumbnail)
+	artBox := NewThumbnailWidget(album.Thumbnail, 140, 16, album.Title)
 
 	// Album Badge & Title
 	badge := primitives.Text("ALBUM").
@@ -203,7 +195,7 @@ func buildAlbumDetailView(c router.RouteContext, album *ytm.AlbumDetails) widget
 	// Tracklist Header
 	tableHeader := primitives.HBox(
 		primitives.Text("#").FontSize(12).Bold().Color(palette.TextMuted),
-		primitives.Box().Width(18),
+		primitives.Box().Width(60),
 		primitives.Expanded(primitives.Text("TITLE").FontSize(12).Bold().Color(palette.TextMuted)),
 		primitives.Text("DURATION").FontSize(12).Bold().Color(palette.TextMuted),
 		primitives.Box().Width(80),
@@ -242,6 +234,8 @@ func buildAlbumTrackRow(index int, track model.Track, allTracks []model.Track) w
 	indexLabel := primitives.Text(fmt.Sprintf("%d", index+1)).
 		FontSize(13).
 		Color(palette.TextMuted)
+
+	thumb := NewThumbnailWidget(track.Thumbnail, 38, 8, track.Title)
 
 	meta := primitives.VBox(
 		primitives.Text(track.Title).FontSize(14).Bold().Color(palette.TextPrimary),
@@ -285,7 +279,9 @@ func buildAlbumTrackRow(index int, track model.Track, allTracks []model.Track) w
 
 	return primitives.HBox(
 		indexLabel,
-		primitives.Box().Width(16),
+		primitives.Box().Width(12),
+		thumb,
+		primitives.Box().Width(12),
 		primitives.Expanded(meta),
 		durationText,
 		primitives.Box().Width(12),
@@ -294,7 +290,7 @@ func buildAlbumTrackRow(index int, track model.Track, allTracks []model.Track) w
 		heartBtn,
 		moreBtn,
 	).
-		PaddingXY(14, 10).
+		PaddingXY(14, 8).
 		Background(palette.Surface).
 		Rounded(12).
 		BorderStyle(1, palette.Border).

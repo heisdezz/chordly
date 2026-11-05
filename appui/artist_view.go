@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gogpu/ui/core/button"
-	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/state"
 	"github.com/gogpu/ui/widget"
@@ -104,16 +103,8 @@ func buildArtistDetailView(c router.RouteContext, artist *ytm.ArtistDetails) wid
 		s.Foreground = palette.TextPrimary
 	})
 
-	// Circular Avatar
-	avatarBox := primitives.HBox(
-		NewVectorIcon(IconWaveform, palette.Accent, 44),
-	).
-		Width(120).
-		Height(120).
-		Background(widget.Hex(0x18242D)).
-		Rounded(60).
-		BorderStyle(2, palette.Accent).
-		CrossAlign(primitives.CrossAxisCenter)
+	// Circular Avatar with real thumbnail
+	avatarBox := NewCircularThumbnail(artist.Thumbnail, 120, artist.Name)
 
 	// Artist Meta
 	badge := primitives.Text("VERIFIED ARTIST").
@@ -211,7 +202,7 @@ func buildArtistDetailView(c router.RouteContext, artist *ytm.ArtistDetails) wid
 		discographySection = primitives.VBox(
 			discogHeader,
 			primitives.Box().Height(10),
-			primitives.HBox(cards...).Gap(12),
+			primitives.HBox(cards...).Gap(14),
 		)
 	}
 
@@ -263,22 +254,42 @@ func buildArtistDetailView(c router.RouteContext, artist *ytm.ArtistDetails) wid
 }
 
 func buildArtistReleaseCard(card model.MixCard) widget.Widget {
+	palette := theme.ActivePalette()
+
+	thumb := NewThumbnailWidget(card.Thumbnail, 136, 12, card.Title)
+
+	meta := primitives.VBox(
+		primitives.Text(card.Title).FontSize(14).Bold().Color(palette.TextPrimary),
+		primitives.Text(card.Subtitle).FontSize(12).Color(palette.TextSecondary),
+	).Gap(2)
+
+	cardContent := primitives.VBox(
+		thumb,
+		primitives.Box().Height(10),
+		meta,
+	).
+		Width(164).
+		Padding(14).
+		Background(palette.Surface).
+		Rounded(16).
+		BorderStyle(1, palette.Border).
+		CrossAlign(primitives.CrossAxisCenter)
+
 	return button.New(
-		button.Text(card.Title),
+		button.Text(""),
 		button.OnClick(func() {
 			Navigate("/album/" + card.ID)
 		}),
-		button.PainterOpt(artistReleaseCardPainter{card: card}),
+		button.PainterOpt(wrapperCardPainter{child: cardContent}),
 	)
 }
 
-type artistReleaseCardPainter struct {
-	card model.MixCard
+type wrapperCardPainter struct {
+	child widget.Widget
 }
 
-func (p artistReleaseCardPainter) PaintButton(canvas widget.Canvas, s button.PaintState) {
-	b := s.Bounds
-	if b.IsEmpty() {
+func (p wrapperCardPainter) PaintButton(canvas widget.Canvas, s button.PaintState) {
+	if s.Bounds.IsEmpty() || p.child == nil {
 		return
 	}
 	palette := theme.ActivePalette()
@@ -286,35 +297,11 @@ func (p artistReleaseCardPainter) PaintButton(canvas widget.Canvas, s button.Pai
 	if s.Hovered {
 		bg = palette.SurfaceLight
 	}
-
-	canvas.DrawRoundRect(b, bg, 14)
-	canvas.StrokeRoundRect(b, palette.Border, 14, 1)
-
-	// Art box
-	artRect := geometry.Rect{
-		Min: geometry.Pt(b.Min.X+12, b.Min.Y+12),
-		Max: geometry.Pt(b.Max.X-12, b.Min.Y+110),
-	}
-	canvas.DrawRoundRect(artRect, widget.Hex(0x1B2830), 10)
-	DrawVectorIcon(canvas, IconWaveform, artRect, palette.Accent, 24)
-
-	// Title
-	titleRect := geometry.Rect{
-		Min: geometry.Pt(b.Min.X+12, b.Min.Y+118),
-		Max: geometry.Pt(b.Max.X-12, b.Min.Y+136),
-	}
-	title := fitText(canvas, p.card.Title, 13, true, titleRect.Width())
-	canvas.DrawText(title, titleRect, 13, palette.TextPrimary, true, widget.TextAlignLeft)
-
-	// Subtitle
-	subRect := geometry.Rect{
-		Min: geometry.Pt(b.Min.X+12, b.Min.Y+138),
-		Max: geometry.Pt(b.Max.X-12, b.Max.Y-10),
-	}
-	canvas.DrawText(p.card.Subtitle, subRect, 11, palette.TextSecondary, false, widget.TextAlignLeft)
+	canvas.DrawRoundRect(s.Bounds, bg, 16)
+	canvas.StrokeRoundRect(s.Bounds, palette.Border, 16, 1)
 }
 
-func (p artistReleaseCardPainter) ButtonHeight(button.Size) float32             { return 165 }
-func (p artistReleaseCardPainter) ButtonPadding(button.Size) (float32, float32) { return 0, 0 }
-func (p artistReleaseCardPainter) ButtonFontSize(button.Size) float32           { return 13 }
-func (p artistReleaseCardPainter) ButtonRadius() float32                        { return 14 }
+func (p wrapperCardPainter) ButtonHeight(button.Size) float32             { return 205 }
+func (p wrapperCardPainter) ButtonPadding(button.Size) (float32, float32) { return 0, 0 }
+func (p wrapperCardPainter) ButtonFontSize(button.Size) float32           { return 13 }
+func (p wrapperCardPainter) ButtonRadius() float32                        { return 16 }

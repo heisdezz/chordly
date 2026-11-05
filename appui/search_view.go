@@ -22,15 +22,14 @@ import (
 )
 
 // Search results page (Metrolist style): query header, categorized filter
-// pills (All / Songs / Albums / Artists / Playlists), and result lists fed by
-// the live InnerTube search backend (WS-YTM).
+// pills (All / Songs / Albums / Artists / Playlists), Top Result card,
+// real image thumbnail loading, and result cards fed by the live InnerTube search backend.
 //
 // This view is a standalone constructor (NewSearchView) so it can be wired
-// into the shell or router during an INTEGRATION phase without editing shared
-// files. To launch a search, call RunSearch(query); the view rebuilds itself
-// from its own reactive signals afterwards.
+// into the shell or router. To launch a search, call RunSearch(query); the view rebuilds
+// itself from its own reactive signals.
 
-// --- Local reactive signals (additive declarations) ---
+// --- Local reactive signals ---
 
 var (
 	searchResultsSignal = gpstate.NewSignal([]model.Track(nil))
@@ -64,11 +63,6 @@ var (
 )
 
 // RunSearch submits a query to the live InnerTube search backend.
-//
-// Setting-part: it mirrors the query into the public state.SearchQuery signal
-// so the header (and future top bar integration) can display it, then performs
-// the actual fetch 300ms later unless a newer request superseded it. Rapid
-// bursts therefore only issue one network call for the final query.
 func RunSearch(query string) {
 	query = strings.TrimSpace(query)
 
@@ -120,17 +114,15 @@ func searchFetch(id uint64, query string) {
 	defer cancel()
 
 	tracks, err := ytm.DefaultService.Client().Search(ctx, query)
-
-	searchLoadingSignal.Set(false)
 	if !searchFetchStillCurrent(id, query) {
 		return
 	}
 
+	searchLoadingSignal.Set(false)
 	if err != nil {
-		log.Printf("[UI] Search failed for %q: %v", query, err)
 		searchErrorSignal.Set(err.Error())
 		searchResultsSignal.Set(nil)
-		ShowError("Search failed — check your connection and try again.")
+		log.Printf("[UI] Search error for %q: %v", query, err)
 		return
 	}
 
@@ -144,8 +136,7 @@ func searchFetch(id uint64, query string) {
 }
 
 // playSearchResultAt seeds the playback queue with the current search results
-// and starts the track at index. The stream URL is resolved asynchronously so
-// the UI reacts instantly (same pattern as ytm.Service.LiveSearch).
+// and starts the track at index.
 func playSearchResultAt(index int) {
 	queue := searchResultsSignal.Get()
 	if index < 0 || index >= len(queue) {
@@ -159,9 +150,10 @@ func playSearchResultAt(index int) {
 	state.Playhead.Set(0)
 	state.PlaybackStatus.Set(model.StatePlaying)
 
+	// Pre-resolve stream URL in background
 	go func(t model.Track) {
-		resCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		resCtx, resCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer resCancel()
 		if err := ytm.DefaultService.PrepareTrackStream(resCtx, &t); err == nil {
 			if state.QueueIndex.Get() == index {
 				state.CurrentTrack.Set(t)
@@ -228,6 +220,8 @@ func (v *SearchViewWidget) Mount(ctx widget.Context) {
 		gpstate.SubscribeForever(searchFilterSignal.AsReadonly(), func(searchFilter) { rebuild() }),
 		gpstate.SubscribeForever(searchLoadingSignal.AsReadonly(), func(bool) { rebuild() }),
 		gpstate.SubscribeForever(searchErrorSignal.AsReadonly(), func(string) { rebuild() }),
+		gpstate.SubscribeForever(state.SearchQuery.AsReadonly(), func(string) { rebuild() }),
+		gpstate.SubscribeForever(theme.SigActivePalette.AsReadonly(), func(theme.Palette) { rebuild() }),
 	)
 }
 
@@ -382,7 +376,16 @@ func buildSearchContent() widget.Widget {
 	switch {
 	case loading && len(results) > 0:
 		// Keep previous results visible while the next query loads.
-		rows = append(rows, buildTrackList(results)...)
+		switch filter {
+		case searchFilterArtists:
+			rows = append(rows, buildArtistSection(results, false)...)
+		case searchFilterAlbums:
+			rows = append(rows, buildAlbumSection(results, false)...)
+		case searchFilterSongs:
+			rows = append(rows, buildTrackList(results)...)
+		default:
+			rows = append(rows, buildCombinedSearchResults(results)...)
+		}
 	case loading:
 		rows = append(rows, NewSearchLoading(query))
 	case errMsg != "":
@@ -402,35 +405,152 @@ func buildSearchContent() widget.Widget {
 	default:
 		switch filter {
 		case searchFilterArtists:
-			rows = append(rows, buildArtistSection(results)...)
+			rows = append(rows, buildArtistSection(results, false)...)
 		case searchFilterAlbums:
-			rows = append(rows, buildAlbumSection(results)...)
+			rows = append(rows, buildAlbumSection(results, false)...)
 		case searchFilterPlaylists:
-			// The InnerTube search backend currently parses song shelves only;
-			// playlist categories arrive with the WS-YTM filter-token work.
 			rows = append(rows, buildSearchStateCard(
 				"Playlists unavailable",
 				"Playlist categories land with the InnerTube filter tokens in the WS-YTM Search Service.",
 				IconQueue,
 			))
-		default:
-			// "All" and "Songs" both render the ranked track list.
+		case searchFilterSongs:
 			rows = append(rows, buildTrackList(results)...)
+		default:
+			// "All" renders Top Result + Track list + Artists + Albums preview
+			rows = append(rows, buildCombinedSearchResults(results)...)
 		}
 	}
 
 	return primitives.VBox(rows...).CrossAlign(primitives.CrossAxisStretch)
 }
 
+func buildCombinedSearchResults(tracks []model.Track) []widget.Widget {
+	if len(tracks) == 0 {
+		return nil
+	}
+
+	rows := make([]widget.Widget, 0)
+
+	// 1. Featured Top Result (Best match)
+	rows = append(rows,
+		buildSectionHeader("Top result", "Best matching track from YouTube Music"),
+		primitives.Box().Height(10),
+		buildTopResultCard(tracks[0], func() { playSearchResultAt(0) }),
+		primitives.Box().Height(24),
+	)
+
+	// 2. Ranked Track List (Top 5 songs)
+	songsLimit := 5
+	if len(tracks) < songsLimit {
+		songsLimit = len(tracks)
+	}
+	rows = append(rows, buildSectionHeader("Songs", "Top matching songs"))
+	rows = append(rows, primitives.Box().Height(8))
+	for i := 0; i < songsLimit; i++ {
+		idx := i
+		rows = append(rows,
+			buildSearchTrackRow(idx, tracks[idx], func() { playSearchResultAt(idx) }),
+			primitives.Box().Height(8),
+		)
+	}
+	rows = append(rows, primitives.Box().Height(16))
+
+	// 3. Artist Cards Preview (1 row of up to 5)
+	artistRows := buildArtistSection(tracks, true)
+	if len(artistRows) > 0 {
+		rows = append(rows, artistRows...)
+		rows = append(rows, primitives.Box().Height(16))
+	}
+
+	// 4. Album Cards Preview (1 row of up to 5)
+	albumRows := buildAlbumSection(tracks, true)
+	if len(albumRows) > 0 {
+		rows = append(rows, albumRows...)
+	}
+
+	return rows
+}
+
+func buildTopResultCard(track model.Track, onPlay func()) widget.Widget {
+	palette := theme.ActivePalette()
+
+	thumb := NewThumbnailWidget(track.Thumbnail, 92, 14, track.Title)
+
+	badge := primitives.Text("TOP RESULT").
+		FontSize(11).
+		Bold().
+		Color(palette.Accent)
+
+	title := primitives.Text(track.Title).
+		FontSize(22).
+		Bold().
+		Color(palette.TextPrimary)
+
+	sub := track.Artist
+	if track.Album != "" {
+		sub += " • " + track.Album
+	}
+	if track.DurationStr != "" {
+		sub += " • " + track.DurationStr
+	}
+	subtitle := primitives.Text(sub).
+		FontSize(13).
+		Color(palette.TextSecondary)
+
+	meta := primitives.VBox(
+		badge,
+		title,
+		subtitle,
+	).Gap(5)
+
+	playBtn := NewVectorIconButton(IconPlay, 44, 18, onPlay, func(s *IconButtonStyle) {
+		s.Background = palette.Accent
+		s.Foreground = palette.OnAccent
+		s.BorderWidth = 0
+	})
+
+	moreBtn := NewVectorIconButton(IconMore, 34, 14, func() {
+		if track.Artist != "" {
+			Navigate("/artist/" + track.Artist)
+		} else if track.Album != "" {
+			Navigate("/album/" + track.Album)
+		}
+	}, func(s *IconButtonStyle) {
+		s.Background = widget.ColorTransparent
+		s.BorderWidth = 0
+		s.Foreground = palette.TextMuted
+	})
+
+	actions := primitives.HBox(
+		playBtn,
+		primitives.Box().Width(8),
+		moreBtn,
+	).CrossAlign(primitives.CrossAxisCenter)
+
+	return primitives.HBox(
+		thumb,
+		primitives.Box().Width(18),
+		primitives.Expanded(meta),
+		actions,
+	).
+		Padding(18).
+		Background(palette.Surface).
+		Rounded(16).
+		BorderStyle(1, palette.Border).
+		CrossAlign(primitives.CrossAxisCenter)
+}
+
 func buildSearchHeader(query string) widget.Widget {
+	palette := theme.ActivePalette()
 	subtitle := "Results come straight from the InnerTube WEB_REMIX client."
 	if query != "" {
 		subtitle = fmt.Sprintf("Showing results for %q.", query)
 	}
 
 	header := primitives.VBox(
-		primitives.Text("Search").FontSize(22).Bold().Color(theme.ColorTextPrimary),
-		primitives.Text(subtitle).FontSize(12).Color(theme.ColorTextMuted),
+		primitives.Text("Search").FontSize(22).Bold().Color(palette.TextPrimary),
+		primitives.Text(subtitle).FontSize(12).Color(palette.TextMuted),
 	).Gap(2)
 
 	countText := ""
@@ -443,7 +563,7 @@ func buildSearchHeader(query string) widget.Widget {
 	case searchLoadingSignal.Get():
 		trailing = NewSpinner(14)
 	case countText != "":
-		trailing = primitives.Text(countText).FontSize(12).Color(theme.ColorTextSecondary)
+		trailing = primitives.Text(countText).FontSize(12).Color(palette.TextSecondary)
 	default:
 		trailing = primitives.Box()
 	}
@@ -466,13 +586,14 @@ func (p searchFilterPillPainter) PaintButton(canvas widget.Canvas, s button.Pain
 		return
 	}
 
+	palette := theme.ActivePalette()
 	active := searchFilterSignal.Get() == p.filter
 
-	bg := theme.ColorSurfaceLight
-	fg := theme.ColorTextSecondary
+	bg := palette.SurfaceLight
+	fg := palette.TextSecondary
 	if active {
-		bg = theme.ColorAccentSoft
-		fg = theme.ColorAccent
+		bg = palette.AccentSoft
+		fg = palette.Accent
 	}
 	switch {
 	case s.Pressed:
@@ -483,7 +604,7 @@ func (p searchFilterPillPainter) PaintButton(canvas widget.Canvas, s button.Pain
 
 	canvas.DrawRoundRect(s.Bounds, bg, s.Bounds.Height()/2)
 	if !active {
-		canvas.StrokeRoundRect(s.Bounds, theme.ColorBorder, s.Bounds.Height()/2, 1)
+		canvas.StrokeRoundRect(s.Bounds, palette.Border, s.Bounds.Height()/2, 1)
 	}
 
 	textRect := s.Bounds
@@ -511,11 +632,11 @@ func buildFilterPillsRow() widget.Widget {
 	return primitives.HBox(pills...).Gap(8)
 }
 
-// --- Track list ("All" / "Songs") ---
+// --- Track list ("Songs") ---
 
 func buildTrackList(tracks []model.Track) []widget.Widget {
 	rows := []widget.Widget{
-		buildSectionHeader("Top results", "Tap play on a row to seed the queue."),
+		buildSectionHeader("Songs", "Tap play on a row to seed the queue."),
 		primitives.Box().Height(8),
 	}
 	for i, track := range tracks {
@@ -529,57 +650,73 @@ func buildTrackList(tracks []model.Track) []widget.Widget {
 }
 
 func buildSearchTrackRow(index int, track model.Track, onPlay func()) widget.Widget {
-	thumb := primitives.HBox(
-		NewVectorIcon(IconWaveform, theme.ColorAccent, 16),
-	).
-		PaddingXY(14, 12).
-		Background(widget.Hex(0x1B2830)).
-		Rounded(10).
-		BorderStyle(1, theme.ColorBorder)
+	palette := theme.ActivePalette()
+
+	thumb := NewThumbnailWidget(track.Thumbnail, 46, 10, track.Title)
 
 	meta := primitives.VBox(
-		primitives.Text(track.Title).FontSize(14).Bold().Color(theme.ColorTextPrimary),
-		primitives.Text(track.Artist).FontSize(12).Color(theme.ColorTextSecondary),
+		primitives.Text(track.Title).FontSize(14).Bold().Color(palette.TextPrimary),
+		primitives.Text(track.Artist).FontSize(12).Color(palette.TextSecondary),
 	).Gap(2)
 
 	playBtn := NewVectorIconButton(IconPlay, 32, 14, onPlay, func(s *IconButtonStyle) {
-		s.Background = theme.ColorAccent
-		s.Foreground = theme.ColorOnAccent
+		s.Background = palette.SurfaceLight
+		s.Foreground = palette.Accent
 		s.BorderWidth = 0
 	})
 
-	moreBtn := NewVectorIconButton(IconMore, 32, 14, func() {
-		// Context menu ("Play Next", "Add to Queue", …) lands with the
-		// shared menu component.
+	heartBtn := NewVectorIconButton(IconHeart, 32, 14, func() {
+		track.IsLiked = !track.IsLiked
+		if track.IsLiked {
+			ShowSuccess("Added to Liked Songs")
+		} else {
+			ShowInfo("Removed from Liked Songs")
+		}
 	}, func(s *IconButtonStyle) {
 		s.Background = widget.ColorTransparent
 		s.BorderWidth = 0
-		s.Foreground = theme.ColorTextMuted
+		if track.IsLiked {
+			s.Foreground = theme.ColorHeartActive
+		} else {
+			s.Foreground = palette.TextMuted
+		}
+	})
+
+	moreBtn := NewVectorIconButton(IconMore, 32, 14, func() {
+		if track.Artist != "" {
+			Navigate("/artist/" + track.Artist)
+		} else if track.Album != "" {
+			Navigate("/album/" + track.Album)
+		}
+	}, func(s *IconButtonStyle) {
+		s.Background = widget.ColorTransparent
+		s.BorderWidth = 0
+		s.Foreground = palette.TextMuted
 	})
 
 	return primitives.HBox(
-		primitives.Text(fmt.Sprintf("%d", index+1)).FontSize(13).Color(theme.ColorTextMuted),
-		primitives.Box().Width(10),
-		thumb,
+		primitives.Text(fmt.Sprintf("%d", index+1)).FontSize(13).Color(palette.TextMuted),
 		primitives.Box().Width(12),
-		meta,
-		primitives.Expanded(primitives.Box()),
-		primitives.Text(track.DurationStr).FontSize(12).Color(theme.ColorTextMuted),
-		primitives.Box().Width(10),
+		thumb,
+		primitives.Box().Width(14),
+		primitives.Expanded(meta),
+		primitives.Text(track.DurationStr).FontSize(12).Color(palette.TextMuted),
+		primitives.Box().Width(12),
 		playBtn,
-		primitives.Box().Width(6),
+		primitives.Box().Width(4),
+		heartBtn,
 		moreBtn,
 	).
-		PaddingXY(12, 8).
-		Background(theme.ColorSurface).
+		PaddingXY(14, 8).
+		Background(palette.Surface).
 		Rounded(12).
-		BorderStyle(1, theme.ColorBorder).
+		BorderStyle(1, palette.Border).
 		CrossAlign(primitives.CrossAxisCenter)
 }
 
 // --- Artists ("Artists") ---
 
-func buildArtistSection(tracks []model.Track) []widget.Widget {
+func buildArtistSection(tracks []model.Track, previewOnly bool) []widget.Widget {
 	order := make([]string, 0)
 	grouped := make(map[string][]model.Track)
 	for _, track := range tracks {
@@ -593,8 +730,16 @@ func buildArtistSection(tracks []model.Track) []widget.Widget {
 		grouped[name] = append(grouped[name], track)
 	}
 
+	if len(order) == 0 {
+		return nil
+	}
+
+	if previewOnly && len(order) > 5 {
+		order = order[:5]
+	}
+
 	rows := []widget.Widget{
-		buildSectionHeader("Artists", "Grouped from the returned song results."),
+		buildSectionHeader("Artists", "Artists found in search results."),
 		primitives.Box().Height(8),
 	}
 
@@ -602,60 +747,79 @@ func buildArtistSection(tracks []model.Track) []widget.Widget {
 	for _, name := range order {
 		group := grouped[name]
 		name, group := name, group
-		cards = append(cards, buildArtistCard(name, len(group), func() { playSearchResultAt(indexOfTrack(tracks, group[0])) }))
+		thumbURL := ""
+		if len(group) > 0 {
+			thumbURL = group[0].Thumbnail
+		}
+		cards = append(cards, buildArtistCard(name, len(group), thumbURL, func() {
+			playSearchResultAt(indexOfTrack(tracks, group[0]))
+		}))
 	}
 
-	rows = append(rows,
-		primitives.HBox(cards...).Gap(12),
-		primitives.Box().Height(14),
-	)
+	rows = append(rows, chunkCards(cards, 5)...)
 	return rows
 }
 
-func buildArtistCard(name string, songCount int, onPlay func()) widget.Widget {
-	avatar := primitives.HBox(
-		NewVectorIcon(IconWaveform, theme.ColorAccent, 20),
-	).
-		PaddingXY(22, 18).
-		Background(widget.Hex(0x16242C)).
-		Rounded(10).
-		BorderStyle(1, theme.ColorBorder)
+func buildArtistCard(name string, songCount int, thumbURL string, onPlay func()) widget.Widget {
+	palette := theme.ActivePalette()
 
-	meta := primitives.VBox(
-		primitives.Text(name).FontSize(14).Bold().Color(theme.ColorTextPrimary),
-		primitives.Text(fmt.Sprintf("%d songs", songCount)).FontSize(12).Color(theme.ColorTextSecondary),
-	).Gap(2)
+	avatar := NewCircularThumbnail(thumbURL, 84, name)
 
-	playBtn := NewVectorIconButton(IconPlay, 30, 13, onPlay, func(s *IconButtonStyle) {
-		s.Background = widget.ColorTransparent
+	nameText := primitives.Text(name).
+		FontSize(15).
+		Bold().
+		Color(palette.TextPrimary)
+
+	badge := primitives.Text(fmt.Sprintf("Artist • %d songs", songCount)).
+		FontSize(12).
+		Color(palette.TextSecondary)
+
+	playBtn := NewVectorIconButton(IconPlay, 34, 14, onPlay, func(s *IconButtonStyle) {
+		s.Background = palette.Accent
+		s.Foreground = palette.OnAccent
 		s.BorderWidth = 0
-		s.Foreground = theme.ColorAccent
 	})
 
-	return primitives.HBox(
-		avatar,
-		primitives.Box().Width(10),
-		meta,
-		primitives.Expanded(primitives.Box()),
+	moreBtn := NewVectorIconButton(IconMore, 34, 14, func() {
+		Navigate("/artist/" + name)
+	}, func(s *IconButtonStyle) {
+		s.Background = widget.ColorTransparent
+		s.BorderWidth = 0
+		s.Foreground = palette.TextMuted
+	})
+
+	actionRow := primitives.HBox(
 		playBtn,
+		primitives.Box().Width(6),
+		moreBtn,
+	).CrossAlign(primitives.CrossAxisCenter)
+
+	return primitives.VBox(
+		avatar,
+		primitives.Box().Height(10),
+		nameText,
+		primitives.Box().Height(2),
+		badge,
+		primitives.Box().Height(10),
+		actionRow,
 	).
-		Width(230).
-		PaddingXY(12, 10).
-		Background(theme.ColorSurface).
-		Rounded(12).
-		BorderStyle(1, theme.ColorBorder).
+		Width(164).
+		Padding(14).
+		Background(palette.Surface).
+		Rounded(16).
+		BorderStyle(1, palette.Border).
 		CrossAlign(primitives.CrossAxisCenter)
 }
 
 // --- Albums ("Albums") ---
 
-func buildAlbumSection(tracks []model.Track) []widget.Widget {
+func buildAlbumSection(tracks []model.Track, previewOnly bool) []widget.Widget {
 	order := make([]string, 0)
 	grouped := make(map[string][]model.Track)
 	for _, track := range tracks {
 		album := strings.TrimSpace(track.Album)
 		if album == "" {
-			album = "Singles" // parser does not surface album shelves yet
+			album = "Singles"
 		}
 		if _, seen := grouped[album]; !seen {
 			order = append(order, album)
@@ -663,8 +827,16 @@ func buildAlbumSection(tracks []model.Track) []widget.Widget {
 		grouped[album] = append(grouped[album], track)
 	}
 
+	if len(order) == 0 {
+		return nil
+	}
+
+	if previewOnly && len(order) > 5 {
+		order = order[:5]
+	}
+
 	rows := []widget.Widget{
-		buildSectionHeader("Albums", "Album data arrives with the WS-YTM filter tokens; parsed tracks are grouped as Singles."),
+		buildSectionHeader("Albums & Singles", "Albums and releases matching your search."),
 		primitives.Box().Height(8),
 	}
 
@@ -672,95 +844,126 @@ func buildAlbumSection(tracks []model.Track) []widget.Widget {
 	for _, album := range order {
 		group := grouped[album]
 		album, group := album, group
-		cards = append(cards, buildAlbumCard(album, group, len(group), func() { playSearchResultAt(indexOfTrack(tracks, group[0])) }))
+		cards = append(cards, buildAlbumCard(album, group, len(group), func() {
+			playSearchResultAt(indexOfTrack(tracks, group[0]))
+		}))
 	}
 
-	rows = append(rows,
-		primitives.HBox(cards...).Gap(12),
-		primitives.Box().Height(14),
-	)
+	rows = append(rows, chunkCards(cards, 5)...)
 	return rows
 }
 
 func buildAlbumCard(album string, group []model.Track, count int, onPlay func()) widget.Widget {
+	palette := theme.ActivePalette()
+
+	thumbURL := ""
 	subtitle := "Various artists"
-	if len(group) > 0 && strings.TrimSpace(group[0].Artist) != "" {
-		subtitle = group[0].Artist
+	if len(group) > 0 {
+		thumbURL = group[0].Thumbnail
+		if strings.TrimSpace(group[0].Artist) != "" {
+			subtitle = group[0].Artist
+		}
 	}
 
-	art := primitives.HBox(
-		NewVectorIcon(IconWaveform, theme.ColorAccent, 20),
-	).
-		PaddingXY(22, 18).
-		Background(widget.Hex(0x18262E)).
-		Rounded(10).
-		BorderStyle(1, theme.ColorBorder)
+	art := NewThumbnailWidget(thumbURL, 136, 12, album)
 
 	meta := primitives.VBox(
-		primitives.Text(album).FontSize(14).Bold().Color(theme.ColorTextPrimary),
-		primitives.Text(subtitle).FontSize(12).Color(theme.ColorTextSecondary),
+		primitives.Text(album).FontSize(14).Bold().Color(palette.TextPrimary),
+		primitives.Text(subtitle).FontSize(12).Color(palette.TextSecondary),
+		primitives.Text(fmt.Sprintf("%d songs", count)).FontSize(11).Color(palette.TextMuted),
 	).Gap(2)
 
-	playBtn := NewVectorIconButton(IconPlay, 30, 13, onPlay, func(s *IconButtonStyle) {
-		s.Background = widget.ColorTransparent
+	playBtn := NewVectorIconButton(IconPlay, 32, 13, onPlay, func(s *IconButtonStyle) {
+		s.Background = palette.Accent
+		s.Foreground = palette.OnAccent
 		s.BorderWidth = 0
-		s.Foreground = theme.ColorAccent
 	})
 
-	return primitives.HBox(
-		art,
-		primitives.Box().Width(10),
-		meta,
-		primitives.Expanded(primitives.Box()),
-		primitives.Text(fmt.Sprintf("%d songs", count)).FontSize(12).Color(theme.ColorTextMuted),
-		primitives.Box().Width(8),
+	moreBtn := NewVectorIconButton(IconMore, 32, 13, func() {
+		Navigate("/album/" + album)
+	}, func(s *IconButtonStyle) {
+		s.Background = widget.ColorTransparent
+		s.BorderWidth = 0
+		s.Foreground = palette.TextMuted
+	})
+
+	bottomRow := primitives.HBox(
+		primitives.Expanded(meta),
 		playBtn,
+		primitives.Box().Width(4),
+		moreBtn,
+	).CrossAlign(primitives.CrossAxisCenter)
+
+	return primitives.VBox(
+		art,
+		primitives.Box().Height(10),
+		bottomRow,
 	).
-		PaddingXY(12, 10).
-		Width(260).
-		Background(theme.ColorSurface).
-		Rounded(12).
-		BorderStyle(1, theme.ColorBorder).
+		Width(164).
+		Padding(14).
+		Background(palette.Surface).
+		Rounded(16).
+		BorderStyle(1, palette.Border).
 		CrossAlign(primitives.CrossAxisCenter)
+}
+
+func chunkCards(cards []widget.Widget, perRow int) []widget.Widget {
+	if len(cards) == 0 {
+		return nil
+	}
+	if perRow <= 0 {
+		perRow = 5
+	}
+	rows := make([]widget.Widget, 0, (len(cards)+perRow-1)/perRow*2)
+	for i := 0; i < len(cards); i += perRow {
+		end := i + perRow
+		if end > len(cards) {
+			end = len(cards)
+		}
+		rows = append(rows, primitives.HBox(cards[i:end]...).Gap(14))
+		if end < len(cards) {
+			rows = append(rows, primitives.Box().Height(14))
+		}
+	}
+	return rows
 }
 
 // --- Shared helpers ---
 
 func buildSectionHeader(title, subtitle string) widget.Widget {
+	palette := theme.ActivePalette()
 	return primitives.HBox(
-		primitives.Text(title).FontSize(16).Bold().Color(theme.ColorTextPrimary),
+		primitives.Text(title).FontSize(16).Bold().Color(palette.TextPrimary),
 		primitives.Expanded(primitives.Box()),
-		primitives.Text(subtitle).FontSize(12).Color(theme.ColorTextMuted),
+		primitives.Text(subtitle).FontSize(12).Color(palette.TextMuted),
 	).CrossAlign(primitives.CrossAxisCenter)
 }
 
 func buildSearchStateCard(title, body string, icon IconType) widget.Widget {
-	// Vertically centering the icon inside a paintable box is left to the
-	// box padding, matching the thumbnail treatment used across the shell.
+	palette := theme.ActivePalette()
 	art := primitives.HBox(
-		NewVectorIcon(icon, theme.ColorAccent, 22),
+		NewVectorIcon(icon, palette.Accent, 22),
 	).
 		Padding(16).
-		Background(theme.ColorSurfaceLight).
+		Background(palette.SurfaceLight).
 		Rounded(12)
 
 	return primitives.HBox(
 		art,
 		primitives.Box().Width(14),
 		primitives.VBox(
-			primitives.Text(title).FontSize(15).Bold().Color(theme.ColorTextPrimary),
-			primitives.Text(body).FontSize(12).Color(theme.ColorTextMuted),
+			primitives.Text(title).FontSize(15).Bold().Color(palette.TextPrimary),
+			primitives.Text(body).FontSize(12).Color(palette.TextMuted),
 		).Gap(3),
 		primitives.Expanded(primitives.Box()),
 	).
 		Padding(18).
-		Background(theme.ColorSurface).
+		Background(palette.Surface).
 		Rounded(14).
-		BorderStyle(1, theme.ColorBorder).
+		BorderStyle(1, palette.Border).
 		CrossAlign(primitives.CrossAxisStart)
 }
 
-// indexOfTrack returns the index of track inside tracks, or -1 when missing.
 func indexOfTrack(tracks []model.Track, track model.Track) int {
 	for i := range tracks {
 		if tracks[i].ID == track.ID {
