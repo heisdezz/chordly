@@ -51,6 +51,37 @@ type DB struct {
 	mu sync.RWMutex
 }
 
+var (
+	defaultDBMu sync.Mutex
+	defaultDB   *DB
+)
+
+// GetDefaultDB returns the lazily initialized singleton DB instance using DefaultDBPath().
+func GetDefaultDB() (*DB, error) {
+	defaultDBMu.Lock()
+	defer defaultDBMu.Unlock()
+	if defaultDB != nil {
+		return defaultDB, nil
+	}
+	path, err := DefaultDBPath()
+	if err != nil {
+		return nil, err
+	}
+	d, err := OpenDB(path)
+	if err != nil {
+		return nil, err
+	}
+	defaultDB = d
+	return defaultDB, nil
+}
+
+// SetDefaultDB sets or overrides the default database singleton (useful in tests).
+func SetDefaultDB(d *DB) {
+	defaultDBMu.Lock()
+	defer defaultDBMu.Unlock()
+	defaultDB = d
+}
+
 // DefaultDBPath returns the standard Chordly SQLite database file path (~/.local/share/chordly/library.db).
 func DefaultDBPath() (string, error) {
 	dataHome := os.Getenv("XDG_DATA_HOME")
@@ -455,4 +486,44 @@ func (d *DB) GetSetting(ctx context.Context, key, defaultValue string) (string, 
 		return "", err
 	}
 	return val, nil
+}
+
+// GetTrackMeta searches favorites and playback history for track metadata by trackID.
+func (d *DB) GetTrackMeta(ctx context.Context, trackID string) (model.Track, bool, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	// Check favorites first
+	var title, artist, thumb string
+	var durSec int
+	err := d.db.QueryRowContext(ctx, `SELECT title, artist, duration_sec, thumbnail_url FROM favorites WHERE id = ? LIMIT 1`, trackID).Scan(&title, &artist, &durSec, &thumb)
+	if err == nil {
+		return model.Track{
+			ID:          trackID,
+			Title:       title,
+			Artist:      artist,
+			Duration:    time.Duration(durSec) * time.Second,
+			DurationStr: fmt.Sprintf("%d:%02d", durSec/60, durSec%60),
+			Thumbnail:   thumb,
+		}, true, nil
+	} else if err != sql.ErrNoRows {
+		return model.Track{}, false, err
+	}
+
+	// Fallback to playback_history
+	err = d.db.QueryRowContext(ctx, `SELECT title, artist, duration_sec, thumbnail_url FROM playback_history WHERE track_id = ? ORDER BY id DESC LIMIT 1`, trackID).Scan(&title, &artist, &durSec, &thumb)
+	if err == nil {
+		return model.Track{
+			ID:          trackID,
+			Title:       title,
+			Artist:      artist,
+			Duration:    time.Duration(durSec) * time.Second,
+			DurationStr: fmt.Sprintf("%d:%02d", durSec/60, durSec%60),
+			Thumbnail:   thumb,
+		}, true, nil
+	} else if err != sql.ErrNoRows {
+		return model.Track{}, false, err
+	}
+
+	return model.Track{ID: trackID}, false, nil
 }

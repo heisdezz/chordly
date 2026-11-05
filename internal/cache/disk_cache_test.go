@@ -359,3 +359,52 @@ func TestWriterResumeAppendsNotOverwrites(t *testing.T) {
 		t.Fatalf("resume overwrote data: %q", data)
 	}
 }
+
+func TestListDownloadedAndSingleton(t *testing.T) {
+	c := newTestCache(t, 0)
+	SetDefaultCache(c)
+	got, err := GetDefaultCache()
+	if err != nil || got != c {
+		t.Fatalf("GetDefaultCache failed: %v, got: %v", err, got)
+	}
+
+	// Empty cache list
+	items, err := c.ListDownloaded()
+	if err != nil {
+		t.Fatalf("ListDownloaded empty error: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected 0 downloaded items, got %d", len(items))
+	}
+
+	// Add 2 complete entries
+	seedComplete(t, c, "trackAlpha01", "alpha content bytes")
+	seedComplete(t, c, "trackBeta002", "beta content bytes longer")
+
+	items, err = c.ListDownloaded()
+	if err != nil {
+		t.Fatalf("ListDownloaded error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 downloaded items, got %d", len(items))
+	}
+
+	var foundAlpha, foundBeta bool
+	for _, item := range items {
+		if item.VideoID == "trackAlpha01" {
+			foundAlpha = true
+			if item.Size != int64(len("alpha content bytes")) {
+				t.Errorf("unexpected size for alpha: %d", item.Size)
+			}
+		}
+		if item.VideoID == "trackBeta002" {
+			foundBeta = true
+			if item.Size != int64(len("beta content bytes longer")) {
+				t.Errorf("unexpected size for beta: %d", item.Size)
+			}
+		}
+	}
+	if !foundAlpha || !foundBeta {
+		t.Errorf("missing downloaded items: alpha=%v beta=%v", foundAlpha, foundBeta)
+	}
+}

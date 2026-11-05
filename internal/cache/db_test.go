@@ -171,3 +171,68 @@ func TestDBHistoryAndSettings(t *testing.T) {
 		t.Errorf("expected 0 history items after clear")
 	}
 }
+
+func TestDBTrackMetaAndSingleton(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB failed: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	// Singleton test
+	SetDefaultDB(db)
+	got, err := GetDefaultDB()
+	if err != nil || got != db {
+		t.Fatalf("GetDefaultDB failed: %v, got: %v", err, got)
+	}
+
+	// Lookup nonexistent
+	meta, found, err := db.GetTrackMeta(ctx, "nonexistent")
+	if err != nil {
+		t.Fatalf("GetTrackMeta failed: %v", err)
+	}
+	if found {
+		t.Fatalf("expected not found for nonexistent track")
+	}
+
+	// Add to favorites and check meta
+	err = db.AddFavorite(ctx, FavoriteItem{
+		ID:           "meta-fav-1",
+		Title:        "Save Your Tears",
+		Artist:       "The Weeknd",
+		DurationSec:  215,
+		ThumbnailURL: "https://example.com/thumb.jpg",
+	})
+	if err != nil {
+		t.Fatalf("AddFavorite failed: %v", err)
+	}
+
+	meta, found, err = db.GetTrackMeta(ctx, "meta-fav-1")
+	if err != nil || !found {
+		t.Fatalf("expected found track meta in favorites, err: %v", err)
+	}
+	if meta.Title != "Save Your Tears" || meta.Artist != "The Weeknd" {
+		t.Errorf("unexpected track meta: %+v", meta)
+	}
+
+	// Add to history and check meta
+	hTrack := model.Track{
+		ID:       "meta-hist-1",
+		Title:    "Levitating",
+		Artist:   "Dua Lipa",
+		Duration: 203 * time.Second,
+	}
+	if err := db.RecordPlay(ctx, hTrack); err != nil {
+		t.Fatalf("RecordPlay failed: %v", err)
+	}
+
+	meta, found, err = db.GetTrackMeta(ctx, "meta-hist-1")
+	if err != nil || !found {
+		t.Fatalf("expected found track meta in history, err: %v", err)
+	}
+	if meta.Title != "Levitating" || meta.Artist != "Dua Lipa" {
+		t.Errorf("unexpected track meta: %+v", meta)
+	}
+}

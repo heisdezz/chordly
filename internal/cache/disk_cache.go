@@ -34,6 +34,13 @@ type Entry struct {
 	CachedBytes int64 // bytes present on disk (the resume offset when partial)
 }
 
+// DownloadItem describes a completed audio file on disk for the library downloads view.
+type DownloadItem struct {
+	VideoID string
+	Size    int64
+	ModTime time.Time
+}
+
 // DiskCache stores streamed audio chunks on disk, one file per video.
 //
 // Lifecycle: a player opens Writer(videoID) and tee's streamed chunks into
@@ -55,6 +62,33 @@ type DiskCache struct {
 	// (Commit's async trigger + explicit calls) cannot double-evict while
 	// each holds a stale picture of the on-disk totals.
 	sweepMu sync.Mutex
+}
+
+var (
+	defaultCacheMu sync.Mutex
+	defaultCache   *DiskCache
+)
+
+// GetDefaultCache returns the default singleton DiskCache instance.
+func GetDefaultCache() (*DiskCache, error) {
+	defaultCacheMu.Lock()
+	defer defaultCacheMu.Unlock()
+	if defaultCache != nil {
+		return defaultCache, nil
+	}
+	dc, err := New()
+	if err != nil {
+		return nil, err
+	}
+	defaultCache = dc
+	return defaultCache, nil
+}
+
+// SetDefaultCache sets or overrides the default cache singleton (useful in tests).
+func SetDefaultCache(c *DiskCache) {
+	defaultCacheMu.Lock()
+	defer defaultCacheMu.Unlock()
+	defaultCache = c
 }
 
 // Default cache layout per the plan: ~/.cache/chordly/audio/{videoID}.webm
@@ -308,6 +342,48 @@ func (c *DiskCache) TotalSize() int64 {
 		return 0
 	}
 	return total
+}
+
+// ListDownloaded returns all completed audio entries currently cached on disk,
+// sorted by modification time descending (newest first).
+func (c *DiskCache) ListDownloaded() ([]DownloadItem, error) {
+	c.mu.Lock()
+	dir := c.dir
+	c.mu.Unlock()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("cache: list downloaded: %w", err)
+	}
+
+	var items []DownloadItem
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasSuffix(name, completeExt) {
+			videoID := strings.TrimSuffix(name, completeExt)
+			info, statErr := entry.Info()
+			if statErr != nil {
+				continue
+			}
+			items = append(items, DownloadItem{
+				VideoID: videoID,
+				Size:    info.Size(),
+				ModTime: info.ModTime(),
+			})
+		}
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ModTime.After(items[j].ModTime)
+	})
+
+	return items, nil
 }
 
 // EnforceQuota prunes least-recently-used complete files until the cache fits

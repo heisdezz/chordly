@@ -30,7 +30,29 @@ func main() {
 		&router.Route{
 			Segment: "library",
 			Name:    "library",
-			Page:    appui.HomePage,
+			Page:    appui.LibraryPage,
+			Children: []*router.Route{
+				{
+					Segment: "favorites",
+					Name:    "library-favorites",
+					Page:    appui.LibraryPage,
+				},
+				{
+					Segment: "playlists",
+					Name:    "library-playlists",
+					Page:    appui.LibraryPage,
+				},
+				{
+					Segment: "history",
+					Name:    "library-history",
+					Page:    appui.LibraryPage,
+				},
+				{
+					Segment: "downloads",
+					Name:    "library-downloads",
+					Page:    appui.LibraryPage,
+				},
+			},
 		},
 		&router.Route{
 			Segment: "search",
@@ -83,6 +105,9 @@ func main() {
 	appui.ActiveSession.SubscribeForever(func(bundle *ytm.TokenBundle) {
 		ytm.DefaultService.SetAuth(bundle)
 	})
+
+	// Start the real audio pipeline (HTTP stream -> Opus decoder -> sink).
+	appui.StartPlaybackEngine()
 
 	// Trigger live YouTube Music home feed synchronization
 	ytm.DefaultService.SyncHomeData(context.Background())
