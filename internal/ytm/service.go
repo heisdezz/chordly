@@ -44,6 +44,11 @@ func (s *Service) SetAuth(bundle *TokenBundle) {
 	if s.player != nil {
 		s.player.SetAuth(bundle)
 	}
+	if bundle == nil {
+		log.Printf("[YTM] session cleared")
+		return
+	}
+	log.Printf("[YTM] session applied: %s", bundle)
 }
 
 // ClearAuth removes the session from all clients.

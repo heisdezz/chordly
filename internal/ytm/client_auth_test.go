@@ -30,6 +30,9 @@ func TestClientSetAuthInjectsHeaders(t *testing.T) {
 		if got := r.Header.Get("Origin"); got != ytmOrigin {
 			t.Errorf("Origin = %q, want %q", got, ytmOrigin)
 		}
+		if got := r.Header.Get("X-Origin"); got != ytmOrigin {
+			t.Errorf("X-Origin = %q, want %q", got, ytmOrigin)
+		}
 		return fakeJSONResponse(t, map[string]any{})
 	})
 	c.now = fixedClock()
